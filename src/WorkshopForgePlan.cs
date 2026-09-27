@@ -4,13 +4,19 @@ using System.Linq;
 
 namespace NearbyCraft
 {
-    // Dry-run the entire input layout before withdrawing anything. Existing stacks
-    // and their in-flight timers are never moved; only newly supplied items balance.
+    // Dry-run the entire input layout before withdrawing anything. Keep each
+    // in-flight item in its original lane; unstarted tails can use spare lanes.
     internal sealed class WorkshopForgePlan
     {
         internal ItemStack[] Inputs;
         internal readonly List<ItemStack> Supplies = new List<ItemStack>();
         internal double Seconds;
+        private struct Lane
+        {
+            internal double First, Repeat;
+            internal int Count, Weight;
+            internal string Category;
+        }
 
         internal static float SmeltSeconds(TileEntityWorkstation station, ItemValue raw, bool first)
         {
@@ -32,13 +38,21 @@ namespace NearbyCraft
         internal static bool Create(TileEntityWorkstation station, Recipe recipe, int batches,
             out WorkshopForgePlan plan, out string reason)
         {
-            plan = new WorkshopForgePlan { Inputs = ItemStack.Clone(station.Input) };
+            return Create(station, recipe, batches, station.Input, null, out plan, out reason);
+        }
+
+        // Read-only virtual-input overload used by the ETA projection. It never
+        // replaces the native station's arrays, queue, clocks or world state.
+        internal static bool Create(TileEntityWorkstation station, Recipe recipe, int batches,
+            ItemStack[] input, float[] timers, out WorkshopForgePlan plan, out string reason)
+        {
+            plan = new WorkshopForgePlan { Inputs = ItemStack.Clone(input) };
             reason = "Waiting for smelted materials";
             int slots = Math.Min(station.InputSlotCount, plan.Inputs.Length);
             foreach (var ingredient in recipe.ingredients)
             {
-                long available = WorkshopMachines.MaterialUnits(station, ingredient, false);
-                long covered = WorkshopMachines.MaterialUnits(station, ingredient, true);
+                long available = WorkshopMachines.MaterialUnits(input, slots, ingredient, false);
+                long covered = WorkshopMachines.MaterialUnits(input, slots, ingredient, true);
                 long required = (long)ingredient.count * batches;
                 if (required <= covered) continue;
                 string name = WorkshopMachines.RawMaterial(ingredient.itemValue.ItemClass.GetItemName());
@@ -67,7 +81,7 @@ namespace NearbyCraft
                 remaining[n]--;
             }
             var loads = new double[slots];
-            for (int i = 0; i < slots; i++) loads[i] = LaneSeconds(station, plan.Inputs[i], i);
+            for (int i = 0; i < slots; i++) loads[i] = LaneSeconds(station, plan.Inputs[i], input, timers, i);
             // Longest material workload first; free lanes go where they reduce
             // completion time most. Bounded feed limits keep this loop small.
             var supplies = plan.Supplies;
@@ -87,16 +101,30 @@ namespace NearbyCraft
                         if (next < finish) { best = i; finish = next; }
                     }
                     if (best < 0) { reason = "Free forge input space"; return false; }
-                    if (plan.Inputs[best] == null || plan.Inputs[best].IsEmpty()) plan.Inputs[best] = new ItemStack(supply.itemValue.Clone(), 1);
-                    else plan.Inputs[best].count++;
-                    loads[best] = finish; remaining[n]--;
+                    int existing = plan.Inputs[best] == null || plan.Inputs[best].IsEmpty() ? 0 : plan.Inputs[best].count;
+                    int chunk = Math.Min(remaining[n], supply.itemValue.ItemClass.MaxCount - existing);
+                    if (existing == 0) plan.Inputs[best] = new ItemStack(supply.itemValue.Clone(), chunk);
+                    else plan.Inputs[best].count += chunk;
+                    loads[best] = finish + (chunk - 1) * (double)SmeltSeconds(station, supply.itemValue, false);
+                    remaining[n] -= chunk;
                 }
+            }
+            BalanceTails(station, plan.Inputs, input, timers, slots);
+            var lanes = new Lane[slots];
+            for (int i = 0; i < slots; i++)
+            {
+                var stack = plan.Inputs[i];
+                if (stack == null || stack.IsEmpty()) continue;
+                lanes[i] = new Lane { First = FirstSeconds(station, stack, input, timers, i),
+                    Repeat = SmeltSeconds(station, stack.itemValue, false), Count = stack.count,
+                    Weight = stack.itemValue.ItemClass.GetWeight(), Category = stack.itemValue.ItemClass.MadeOfMaterial.ForgeCategory };
+                loads[i] = lanes[i].First + (stack.count - 1) * lanes[i].Repeat;
             }
             // Estimate readiness for this batch, not the time to empty unrelated
             // or overstocked input stacks. Each native lane has its own timer.
             foreach (var ingredient in recipe.ingredients)
             {
-                long deficit = (long)ingredient.count * batches - WorkshopMachines.MaterialUnits(station, ingredient, false);
+                long deficit = (long)ingredient.count * batches - WorkshopMachines.MaterialUnits(input, slots, ingredient, false);
                 if (deficit <= 0) continue;
                 string category = ingredient.itemValue.ItemClass.MadeOfMaterial.ForgeCategory;
                 double low = 0, high = loads.Length == 0 ? 0 : loads.Max();
@@ -105,10 +133,9 @@ namespace NearbyCraft
                     double mid = (low + high) / 2; long units = 0;
                     for (int i = 0; i < slots; i++)
                     {
-                        var stack = plan.Inputs[i];
-                        if (stack == null || stack.IsEmpty() || !string.Equals(category, stack.itemValue.ItemClass.MadeOfMaterial.ForgeCategory, StringComparison.OrdinalIgnoreCase)) continue;
-                        double first = FirstSeconds(station, stack, i), repeat = SmeltSeconds(station, stack.itemValue, false);
-                        if (mid >= first) units += Math.Min(stack.count, 1 + (long)((mid - first) / repeat)) * stack.itemValue.ItemClass.GetWeight();
+                        var lane = lanes[i];
+                        if (lane.Count <= 0 || !string.Equals(category, lane.Category, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (mid >= lane.First) units += Math.Min(lane.Count, 1 + (long)((mid - lane.First) / lane.Repeat)) * lane.Weight;
                     }
                     if (units >= deficit) high = mid; else low = mid;
                 }
@@ -117,18 +144,62 @@ namespace NearbyCraft
             return true;
         }
 
-        private static double FirstSeconds(TileEntityWorkstation station, ItemStack stack, int slot)
+        // Move whole unstarted items only when doing so reduces the two lanes'
+        // finish time. Transfer a calculated chunk, not one iteration per item.
+        private static void BalanceTails(TileEntityWorkstation station, ItemStack[] after,
+            ItemStack[] before, float[] timers, int slots)
         {
-            var before = station.Input[slot];
-            float timer = station.GetTimerForSlot(slot);
+            for (int pass = 0; pass < slots * slots * 4; pass++)
+            {
+                int from = -1, to = -1, count = 0;
+                double improvement = .001;
+                for (int a = 0; a < slots; a++)
+                {
+                    var source = after[a];
+                    if (source == null || source.IsEmpty() || source.count < 2) continue;
+                    double repeat = SmeltSeconds(station, source.itemValue, false);
+                    double sourceTime = LaneSeconds(station, source, before, timers, a);
+                    for (int b = 0; b < slots; b++)
+                    {
+                        if (a == b) continue;
+                        var destination = after[b];
+                        bool empty = destination == null || destination.IsEmpty();
+                        if (!empty && !StorageTransferPlan.Matches(source, destination)) continue;
+                        int capacity = source.itemValue.ItemClass.MaxCount - (empty ? 0 : destination.count);
+                        int maximum = Math.Min(source.count - 1, capacity);
+                        if (maximum <= 0) continue;
+                        double destinationTime = empty ? 0 : LaneSeconds(station, destination, before, timers, b);
+                        double offset = empty ? SmeltSeconds(station, source.itemValue, true) - repeat : 0;
+                        double ideal = (sourceTime - destinationTime - offset) / (2 * repeat);
+                        for (int round = 0; round < 2; round++)
+                        {
+                            int moved = Math.Min(maximum, Math.Max(1, (int)Math.Floor(ideal) + round));
+                            double gain = Math.Max(sourceTime, destinationTime)
+                                - Math.Max(sourceTime - moved * repeat, destinationTime + offset + moved * repeat);
+                            if (gain <= improvement) continue;
+                            improvement = gain; from = a; to = b; count = moved;
+                        }
+                    }
+                }
+                if (from < 0) return;
+                if (after[to] == null || after[to].IsEmpty()) after[to] = new ItemStack(after[from].itemValue.Clone(), count);
+                else after[to].count += count;
+                after[from].count -= count;
+            }
+        }
+
+        private static double FirstSeconds(TileEntityWorkstation station, ItemStack stack, ItemStack[] input, float[] timers, int slot)
+        {
+            var before = input[slot];
+            float timer = timers == null ? station.GetTimerForSlot(slot) : timers[slot];
             return before != null && !before.IsEmpty() && before.itemValue.type == stack.itemValue.type
                 && timer >= 0 && !float.IsInfinity(timer) && !float.IsNaN(timer)
                 ? timer : SmeltSeconds(station, stack.itemValue, true);
         }
 
-        private static double LaneSeconds(TileEntityWorkstation station, ItemStack stack, int slot)
+        private static double LaneSeconds(TileEntityWorkstation station, ItemStack stack, ItemStack[] input, float[] timers, int slot)
         {
-            return stack == null || stack.IsEmpty() ? 0 : FirstSeconds(station, stack, slot)
+            return stack == null || stack.IsEmpty() ? 0 : FirstSeconds(station, stack, input, timers, slot)
                 + Math.Max(0, stack.count - 1) * (double)SmeltSeconds(station, stack.itemValue, false);
         }
     }

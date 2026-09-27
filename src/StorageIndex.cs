@@ -282,7 +282,7 @@ namespace NearbyCraft
         private static bool CanConsume(StorageTransferPlan plan, IList<ItemStack> required, int multiplier)
         {
             foreach (ItemStack needed in AggregateRequirements(required, multiplier))
-                if (plan.Withdraw(needed, needed.count) != needed.count) return false;
+                if (plan.WithdrawCraft(needed, needed.count) != needed.count) return false;
             return true;
         }
 
@@ -295,7 +295,7 @@ namespace NearbyCraft
                 ItemStack source = required[i];
                 if (!IsRequirement(source)) continue;
                 int count = SafeRequiredCount(source.count, multiplier);
-                ItemStack existing = result.Find(s => StorageTransferPlan.Matches(s, source));
+                ItemStack existing = result.Find(s => StorageTransferPlan.CraftMatches(s, source));
                 if (existing == null)
                 {
                     existing = source.Clone();

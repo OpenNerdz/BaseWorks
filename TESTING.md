@@ -1,4 +1,239 @@
-# NearbyCraft 1.8.0 acceptance checks
+# NearbyCraft 2.0.6 acceptance checks
+
+## 2.0.6 production reliability and ETA (2026-09-26)
+
+The supplied-crucible regression uses V3.2's workbench recipe: 100 forged iron,
+20 mechanical parts, 1,200 small stone, 20 oil and 900 clay. Tests cover full and
+partial supplies, already queued iron, a busy workbench, missing raw material,
+locked supplies and AutoCraft off. An inventory metadata case failed before the
+fix: planning accepted the components but payment used storage-transfer equality.
+Payment now uses the native crafting ingredient rule with reservation protection.
+An alternate-recipe regression also verifies that ready final ingredients win over
+a faster recipe requiring new components. The original reported live inventory
+state is unavailable, so these reproduce failure modes rather than prove which
+one occurred in that session.
+
+ETA analytical cases cover 300-second crucible crafting, remaining first-item queue
+time, dependent iron production, parallel and unequal-speed machines, competing
+jobs, existing smelting assignments, paused/busy/unfueled stations, unavailable
+inputs, large native batches and read-only state conservation. The projection uses
+whole-batch dependency barriers; it is deliberately approximate/conservative, not
+a promise of exact wall-clock completion. Loaded chunks and continued automation
+are required. A bounded projection reports unavailable/complex plans rather than
+showing a partly calculated countdown.
+
+Forge tests cover two/three input lanes, preserving an active .1/.25-second timer,
+rebalancing existing supplies without withdrawals, resuming imbalanced assignments,
+material conservation and reserving a lane for each required material. Manual-output
+accounting tests cover split/shift-sized pickups, moving slots, combined manual and
+automatic collection, complete take-all, persistence, and cancelled queues.
+
+`DOTNET_ROLL_FORWARD=Major dotnet run --project tests/SchedulerTests.csproj -- --profile`
+measures the production scheduler against API stubs with a fresh isolated settings
+file. On this machine a 20,000-cement order across 24 forges took about **6.2 ms /
+6.4 MiB** for initial allocation; unchanged smelting ticks averaged **0.08 ms /
+94.5 KiB**; the ETA took **0.57 ms / 447.5 KiB**. Before the transaction and timing
+optimizations, the same fresh fixture measured **12.7 ms / 14.4 MiB**, **0.09 ms /
+94.5 KiB**, and **0.90 ms / 655.3 KiB**, respectively. These are synthetic CPU and
+managed-allocation measurements, not Unity frametimes or retained-memory totals.
+
+The opt-in native fixture now verifies a visible ETA and calls the real workstation
+output model after native crafting, exercising the new Harmony hook. It was
+compiled, but not launched while the user's game was running. The existing native
+runs below predate these changes; they do not verify 2.0.6. The final current matrix
+and release build are recorded with the release artifact.
+
+Final automated matrix: **4,373** scheduler assertions, **45** machine-transaction
+assertions, **200** persistence assertions, **536,906** transfer/rule assertions,
+**57/57** native API metadata checks, **768** XML/package assertions and both backup
+tests passed. Normal and opt-in gameplay builds completed without warnings/errors.
+See `dist/verification-2.0.6.log`. No current-version native gameplay run was made.
+
+## 2.0.5 mirrored-label correction
+
+The original game screenshot and enlarged native QA render show an upright
+console with horizontally mirrored keypad digits, STORAGE title and CRT print.
+The exporter now reflects X as part of Blender-to-Unity conversion and reverses
+triangle winding, keeping the established +Z front and all saved rotations.
+Static checks assert the transformed bounds, a keyed first vertex and the
+reversed winding; the native T1 QA capture is now 1024px for readable details.
+The isolated V3.2/Proton run (`dist/asset-qa-native.log`) passed **50/50** model
+and GPU-render checks. The 1024px capture was inspected: STORAGE, NC / SUPPLY
+LINK and the keypad read normally, with the screen on the left and keypad on
+the right. It loaded no world and restored the previous installed mod.
+
+## 2.0.4 existing-block facing regression
+
+The 2.0.3 mesh yaw change was wrong for an already-placed console: it made the
+saved block appear to face backward. The runtime exporter restored the original
++Z front. The upright-only placement rule is retained.
+
+## 2.0.3 block positioning correction
+
+The three explicitly defined floor-standing machine blocks now require
+`OnlySimpleRotations`, and Tier 2/3 inherit it; the tall locker already had it.
+The 2.0.3 runtime mesh rotated to -Z, which later proved wrong for already-placed
+blocks and was reverted in 2.0.4. Static package checks assert all six block rules
+and transformed bounds. The isolated native main-menu render fixture checks
+the corrected front side and saves `qa-userdata/nearbycraft-model-front-qa.png`
+for visual inspection. Already placed blocks with an upside-down saved rotation
+must be picked up and replaced; the update does not rewrite world data.
+
+## 2.0.2 custom block asset checks
+
+The six supplied `design/game_blocks` models are exported as compressed runtime
+meshes, with three LODs and memory-bounded 1024px copies of their texture atlases.
+`tools/verify_package.py` checks each named block, icon, texture, triangle count,
+collider and Blender-to-Unity bounds transform. The full game-free test matrix and
+Release build completed with zero compiler warnings or errors. A guarded
+main-menu-only V3.2/Proton run (`dist/asset-qa-native.log`) passed **50 native
+assertions**: all six model names resolve through the real `ModelEntity` hook;
+all six prefabs have colliders, LOD groups and supported shaders; cloned materials
+are independent; and off-screen GPU renders show visible geometry with no
+error-magenta pixels. It used `qa-userdata`, loaded no world and restored the
+previously installed mod afterward. The opt-in fixture is excluded from releases.
+
+This is not a placement or save/reload test. In a disposable world, still verify
+all six blocks' placement and facing, both locker heights, selection/repair/pickup,
+all console upgrades, E menus, icons and LOD transitions before using a main save.
+
+## Storage / Production interface refinement
+
+The console's former small header action is now a two-section Storage / Production switch with a
+live job/paused summary. Production uses distinct Recipes, New Request, Jobs, Workstations,
+Completed and Settings areas, with a named Storage return action. Its dark-grey backplates and
+secondary text were checked at 1600x1000 in an outdoor daytime scene; the workstation and
+material requirements render on separate lines. Control names and save formats are unchanged.
+
+The final disposable-world run (`dist/gameplay-qa-ui-final.log`,
+`NC_QA_UI_20260922_B`) completed **174/174 native assertions**, including the two-way section
+switch, live state summary, request-card requirements, actual production, rendered labels,
+world/settings reload and completed history. Captures are under
+`qa-userdata/production-ui-final-*.png`. There was no NearbyCraft exception or XML error;
+the only ERR was the game's Xbox Live shutdown message. Normal saves were not opened.
+
+## Fast production iteration
+
+Run `bash tools/test_fast.sh` after C# changes. It builds the real game-targeted DLL,
+then runs scheduler, native-transaction and persistence fixtures without launching the
+game. Use `bash tools/test_fast.sh --full` for the wider standalone/XML/native-API
+matrix before a release. Keep the disposable in-game QA as the final integration gate;
+these stubs cannot validate Harmony binding, Unity UI, or actual world reload behavior.
+
+`ProfileWorkshopTicks` in the installed mod's `config.json` defaults to `false`.
+Temporarily set it to `true` to log a 10-tick summary for each active controller:
+mean/max total time plus storage scan, device discovery, machine service and scheduler
+means. Turn it off after profiling. The counts used by recipe candidate timing are
+snapshotted once per scheduling decision; the native transaction still validates live
+storage before moving any items.
+
+## 2.0.1 recurring-work regression
+
+The terminal's two-second scan now compares exact chest/lock/stack snapshots and skips catalog rebuild and grid redraw when nothing changed. The disposable-world fixture checks unchanged scans, newly added and emptied stacks, in-place count changes, externally replaced chest arrays and supported slot locks. Workshop planning stages only recipes reachable from an active order (including dependencies); standalone fixtures compare the resulting Concrete plan with the full planner and verify that idle controllers stage no recipes. Busy stations also skip unqueueable recipe work while retaining AutoCraft ingredient planning.
+
+Verified on 22 September 2026 against V3.2 b10: the standalone matrix, XML/package checks and normal/opt-in builds pass. The isolated native run (`dist/gameplay-qa-201.log`) completed **166/166** assertions, including exact terminal refresh detection, real forge/mixer production, UI bindings, and world/settings save-reload. It reported no NearbyCraft error; the only ERR line is the game's Xbox Live shutdown message also seen in earlier runs. Normal saves and settings were not opened by the fixture. A frametime comparison in the user's actual base is still needed to quantify the improvement.
+
+## 2.0.0 continuous-production and recipe-coverage regression
+
+The scheduler now queues each forge's currently smelted partial chunk and retains the exact remaining
+assignment while that native chunk crafts. Regression fixtures cover first-chunk submission, busy-queue
+retention, final-chunk continuation and exact delivery without duplicated demand. Queue transactions
+also preserve fixed native quality.
+
+Recipe eligibility now includes non-stackable container-safe outputs and the vanilla fixed-tier Anvil,
+Cooking Pot and Cooking Grill, while variable-quality equipment stays excluded. The production screen
+adds a READY/ALL catalog scope, searches the entire supported catalog, blocks requests with no enabled
+compatible workstation, gives recipe requirements two readable lines and reports rolling machine work.
+
+Verified on 22 September 2026 against V3.2 b10: **536,906** transfer/rule assertions, **4,321**
+scheduler assertions, **45** machine-transaction assertions, **200** persistence assertions, all
+**55** native API metadata checks, **592** XML/package checks and both closed-game backup tests pass.
+Normal and opt-in builds completed with zero warnings and zero errors. Steam-launched disposable-world
+run D (`gameplay-qa-200-d.log`, `NC_QA_200_20260922_D`) passed **157/157** assertions. It observed a
+real forge with only a partial Cement allocation ready, queued that chunk immediately and retained its
+exact remainder. It also verified Cement Mixer and fixed-tier Anvil discovery, variable-quality weapon
+exclusion, the READY/ALL catalog, visible native label geometry, exact delivery, stock replenishment,
+history and full world/settings save-reload recovery. Screens were inspected at 1600x1000; the normal
+save was never opened.
+
+## 1.9.0 whole-job planner regression
+
+The production planner now recursively preflights the complete request, reports the maximum currently
+craftable amount and missing base component, selects a viable fastest recipe path, and creates logical
+component claims shared by the real queue/forge transactions. Regression fixtures verify that a
+Concrete plan reserves Stone separately for Sand, Cement and final Concrete; an unclaimed step cannot
+spend another step's allocation; committing a native batch releases exactly its own claim.
+
+The vanilla forge recovery recipe `4 unit_glass -> 1 resourceCrushedSand` is explicitly rejected because
+the mapped raw input is the same Crushed Sand output. A scheduler fixture presents both forge and mixer
+Sand recipes and confirms only the productive mixer receives work. Maximum calculation uses logarithmic
+search rather than walking every requested item.
+
+Verified on 22 September 2026 against V3.2 b10: **536,906** transfer/rule assertions, **4,317**
+scheduler assertions, **44** machine-transaction assertions, **200** persistence assertions, all
+**55** native API metadata checks, **585** XML/package checks and both closed-game backup tests pass.
+Normal and opt-in builds completed with zero warnings and zero errors. Steam-launched disposable-world
+run C (`gameplay-qa-190-c.log`, `NC_QA_190_20260922_C`) passed **142/142** assertions. It verified the
+native maximum/missing-component preview for a 1,000 Concrete Mix request, MAX selection, Stone claims
+across Sand/Cement/final Concrete, rejection of the forge recovery loop, real native queues and the
+full save/unload/reload path. The real mixer also queued all 120 available Sand cycles in one batch.
+The redesigned job row's item name, state badge, delivery goal and activity line all produced visible
+native label geometry for both the Concrete and adaptive Sand jobs. Production views were captured
+at 1600x1000 and inspected; the normal save was never opened.
+
+## 1.8.3 adaptive production regression
+
+The production scheduler now queues the largest safe native batch instead of fixed ten-cycle waves.
+Regression fixtures cover a 2,000-item concrete request in one mixer, ingredient-limited and
+workstation-output-limited contraction, proportional fast/slow-machine distribution, and adaptive
+forge feeding. Large-batch selection uses logarithmic dry-runs and commits the selected transaction once.
+
+Standalone verification covers transfer conservation, native queue transactions, scheduler/store
+integration, package structure and native API metadata. The isolated engine fixture additionally
+uses the real V3.2 workstation queue, world save/reload and XUi implementation.
+
+Verified on 22 September 2026: **536,906** transfer/rule assertions, **4,313** scheduler assertions,
+**41** machine-transaction assertions, **200** persistence assertions, all **55** native API metadata
+checks, **547** XML/package checks and both closed-game backup tests pass. The V3.2 build completed
+with zero warnings and zero errors. Disposable-world run C (`gameplay-qa-183-c.log`,
+`NC_QA_183_20260922_C`) passed **117/117** assertions. Its real mixer queued all 120 available sand
+cycles in one capacity-aware native batch; native forge/mixer operation, transactional collection,
+Completed/Repeat, stock replenishment, world save/unload/reload and the compact production tabs also
+passed. The normal save was never opened.
+
+## 1.8.2 production status and vanilla UI regression
+
+The scheduler fixture recreates the reported saved state: 1,000 concrete requested, 30 queued,
+22 delivered and eight still active in the only mixer. With supplies for the next batch present,
+the row now says the eight items are crafting and that the next batch starts when the current machine
+is free. Finished-but-uncollected output has a distinct state. All existing controls and bindings remain.
+
+Package checks enforce the unbranded vanilla headers, compact recipe sections, visible requirements,
+native recipe click sound and neutral game-button palette. A guarded engine run captures the Queue,
+Workstations, Settings and History views at 1600x1000.
+
+Verified on 21 September 2026 against V3.2 b10: **536,906** transfer/rule assertions, **4,979**
+scheduler assertions, **37** machine-transaction assertions, **200** persistence assertions, all
+**55** native patch/API checks and **543** XML/package checks pass. Final disposable-world run C
+(`gameplay-qa-182-c.log`, `NC_QA_182_20260921_C`) passed **114/114** assertions. It observed a live
+mixer queue and confirmed the job status reported active crafting instead of the false free-machine
+wait. Queue, Workstations, Settings and Completed screenshots were inspected at 1600x1000. No
+NearbyCraft exception, missing workshop control or XML error occurred; the normal save was never opened.
+The same startup confirmed the user's built-in `DiscordDisabled=True` preference is honored: the SDK
+did not initialize, log in, open audio devices or attempt Discord RPC.
+
+## 1.8.1 craft eligibility regression
+
+The transfer suite verifies that craft payment follows V3.2's native type-only ingredient matching
+while still excluding items with installed modifications. Exact metadata/quality/paint matching
+remains in place for terminal, loadout and storage operations. A disposable-world check exercises
+the actual cement-mixer recipe through the Craft-button bridge using nearby stacks whose incidental
+values differ from the recipe templates.
+
+Verified on 21 September 2026 against V3.2 b10: **536,906** transfer/rule assertions, all **55**
+native patch/API checks and **535** XML/package checks pass. Disposable-world run A passed **113/113**
+assertions, including the real cement-mixer bridge and exact nearby payment, with no NearbyCraft
+errors. The normal save was never opened by the fixture.
 
 ## 1.8.0 current acceptance status
 
@@ -217,7 +452,7 @@ See DeepBore/TESTING.md for the isolated in-engine integration run.
 
 The standalone suites cover the production transaction planner, tier/reserve rules, XML patch targets, recipe references, upgrade tool allow-lists, localization, patch-site metadata and closed-game backups. They do not launch Unity or simulate mouse input; the separate native game fixtures are described above.
 
-Workshop planner checks additionally cover pending-output accounting, bounded batches, multi-output target limits, missing ingredients, protected slots, hypothetical capacity reservations that must never mint products, partial collection, metadata retention and 2,000 randomized target/collection scenarios. Broader station progression, physical UI interaction and full process-restart recovery remain on the manual checklist below.
+Workshop planner checks additionally cover pending-output accounting, capacity-aware batches, multi-output target limits, missing ingredients, protected slots, hypothetical capacity reservations that must never mint products, partial collection, metadata retention and 2,000 randomized target/collection scenarios. Broader station progression, physical UI interaction and full process-restart recovery remain on the manual checklist below.
 
 Use a disposable local world with EAC disabled. Do not use your main save as the first test.
 

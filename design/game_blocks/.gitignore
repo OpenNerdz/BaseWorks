@@ -1,0 +1,12 @@
+*.blend1
+unity/Library/
+unity/Logs/
+unity/Temp/
+unity/obj/
+unity/UserSettings/
+unity/Assets/Generated/
+unity/Assets/NearbyCraft/
+unity/*.csproj
+unity/*.sln
+built/
+staged/

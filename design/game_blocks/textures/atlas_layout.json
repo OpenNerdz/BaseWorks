@@ -1,0 +1,98 @@
+{
+  "paint": {
+    "x": 0,
+    "y": 0,
+    "width": 512,
+    "height": 512
+  },
+  "secondary": {
+    "x": 512,
+    "y": 0,
+    "width": 512,
+    "height": 512
+  },
+  "steel": {
+    "x": 1024,
+    "y": 0,
+    "width": 512,
+    "height": 512
+  },
+  "rubber": {
+    "x": 1536,
+    "y": 0,
+    "width": 512,
+    "height": 512
+  },
+  "ivory": {
+    "x": 0,
+    "y": 512,
+    "width": 512,
+    "height": 512
+  },
+  "rust": {
+    "x": 512,
+    "y": 512,
+    "width": 512,
+    "height": 512
+  },
+  "screen": {
+    "x": 1024,
+    "y": 512,
+    "width": 512,
+    "height": 512
+  },
+  "keypad": {
+    "x": 1536,
+    "y": 512,
+    "width": 512,
+    "height": 512
+  },
+  "title": {
+    "x": 0,
+    "y": 1024,
+    "width": 512,
+    "height": 512
+  },
+  "service": {
+    "x": 512,
+    "y": 1024,
+    "width": 512,
+    "height": 512
+  },
+  "gauge": {
+    "x": 1024,
+    "y": 1024,
+    "width": 512,
+    "height": 512
+  },
+  "legend": {
+    "x": 1536,
+    "y": 1024,
+    "width": 512,
+    "height": 512
+  },
+  "hazard": {
+    "x": 0,
+    "y": 1536,
+    "width": 512,
+    "height": 512
+  },
+  "vents": {
+    "x": 512,
+    "y": 1536,
+    "width": 512,
+    "height": 512
+  },
+  "tiers": {
+    "x": 1024,
+    "y": 1536,
+    "width": 512,
+    "height": 512
+  },
+  "lamps": {
+    "x": 1536,
+    "y": 1536,
+    "width": 512,
+    "height": 512
+  }
+}

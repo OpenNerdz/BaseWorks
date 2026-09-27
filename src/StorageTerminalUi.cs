@@ -132,9 +132,11 @@ namespace NearbyCraft
                     && !Input.GetMouseButton(0) && !Input.GetMouseButton(1))
                 {
                     nextRefresh = Time.realtimeSinceStartup + 2f;
-                    session.Rescan();
-                    grid.RefreshFromSession();
-                    SetAllChildrenDirty();
+                    if (session.Rescan())
+                    {
+                        grid.RefreshFromSession();
+                        SetAllChildrenDirty();
+                    }
                 }
             }
             if (session != null && IsDirty) { RefreshBindingsSelfAndChildren(); IsDirty = false; }
@@ -162,25 +164,37 @@ namespace NearbyCraft
 
         private void OpenProduction()
         {
-            if (session == null || !session.IsAvailable || !xui.DragAndDropWindow.CurrentStack.IsEmpty()) return;
-            var world = GameManager.Instance.World;
-            // Existing linked controllers retain their settings and remain the
-            // authority when the console is used as another access screen.
-            if (productionPosition == terminalPosition && WorkshopStore.Get(productionPosition) == null)
+            if (session == null || !session.IsAvailable) return;
+            if (!xui.DragAndDropWindow.CurrentStack.IsEmpty())
             {
-                foreach (var c in WorkshopStore.Controllers)
-                    if (c.Linked && c.Console == terminalPosition && WorkshopManager.IsManager(world.GetBlock(c.Position).Block)
-                        && WorkshopManager.Accessible(world.GetTileEntity(c.Position))
-                        && (c.Position.ToVector3() - terminalPosition.ToVector3()).sqrMagnitude
-                            <= NearbyCraftMod.Config.TerminalRange * NearbyCraftMod.Config.TerminalRange)
-                    { productionPosition = c.Position; break; }
+                GameManager.ShowTooltip(xui.playerUI.entityPlayer, "Put down the held stack before opening Production.");
+                return;
             }
+            ResolveProductionController();
             var group = xui.FindWindowGroupByName(WorkshopManager.WindowGroupId) as XUiC_WorkshopWindowGroup;
             if (group == null) return;
             group.SetPosition(productionPosition, interactionPosition);
             var wm = xui.playerUI.windowManager;
             wm.Close(StorageTerminalManager.WindowGroupId);
             wm.Open(WorkshopManager.WindowGroupId, true);
+        }
+
+        private WorkshopControllerData ResolveProductionController()
+        {
+            if (!hasTerminalPosition) return null;
+            var controller = WorkshopStore.Get(productionPosition);
+            if (controller != null || productionPosition != terminalPosition) return controller;
+            var world = GameManager.Instance == null ? null : GameManager.Instance.World;
+            if (world == null) return null;
+            // Existing linked controllers retain their settings and remain the
+            // authority when the console is used as another access screen.
+            foreach (var linked in WorkshopStore.Controllers)
+                if (linked.Linked && linked.Console == terminalPosition && WorkshopManager.IsManager(world.GetBlock(linked.Position).Block)
+                    && WorkshopManager.Accessible(world.GetTileEntity(linked.Position))
+                    && (linked.Position.ToVector3() - terminalPosition.ToVector3()).sqrMagnitude
+                        <= NearbyCraftMod.Config.TerminalRange * NearbyCraftMod.Config.TerminalRange)
+                { productionPosition = linked.Position; return linked; }
+            return null;
         }
 
         public override void OnOpen()
@@ -500,6 +514,12 @@ namespace NearbyCraft
                     return true;
                 case "terminal_result_count":
                     value = session == null ? "0" : session.ResultCount.ToString();
+                    return true;
+                case "terminal_production_summary":
+                    var production = ResolveProductionController();
+                    value = production == null ? "PLAN JOBS & MACHINES"
+                        : !production.Enabled ? "AUTOMATION PAUSED"
+                        : production.Targets.Count + (production.Targets.Count == 1 ? " JOB" : " JOBS") + " / MACHINES";
                     return true;
                 default:
                     return base.GetBindingValueInternal(ref value, bindingName);

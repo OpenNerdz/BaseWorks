@@ -16,6 +16,8 @@ namespace NearbyCraft
         public bool TerminalAutoFocusSearch = true;
         public System.Collections.Generic.Dictionary<string, int> PersonalReserves = new System.Collections.Generic.Dictionary<string, int>();
         public bool DebugLogging = false;
+        // Opt-in, low-volume breakdown of the two-second workshop tick.
+        public bool ProfileWorkshopTicks = false;
 
         internal void Validate()
         {

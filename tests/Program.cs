@@ -109,6 +109,18 @@ Check(!StorageTransferPlan.Matches(storedSupply, carriedSupply), "Block textures
 carriedSupply.itemValue.TextureFullArray = 0;
 carriedSupply.itemValue.Flags = 2;
 Check(!StorageTransferPlan.Matches(storedSupply, carriedSupply), "Item flags remain distinct");
+slots = new[] { Stack(1, 25, 99) };
+slots[0].itemValue.Seed = 321;
+slots[0].itemValue.Flags = 3;
+slots[0].itemValue.TextureFullArray = 7;
+slots[0].itemValue.HasQuality = true;
+plan = Plan(slots);
+Check(plan.WithdrawCraft(Stack(1, 1), 20) == 20 && plan.TryCommit(_ => true) && slots[0].count == 5,
+    "Craft payment mirrors vanilla type-only ingredient matching");
+slots[0].itemValue.HasModSlots = slots[0].itemValue.InstalledMods = true;
+plan = Plan(slots);
+Check(plan.WithdrawCraft(Stack(1, 1), 5) == 0,
+    "Craft payment mirrors vanilla modified-item protection");
 Check(TerminalRules.IsRightClick(-2) && !TerminalRules.IsRightClick(-1)
     && !TerminalRules.IsRightClick(1), "Right-click uses NGUI -2, not Unity button 1");
 Check(TerminalRules.CanShiftToInventory(true, false), "Shift-click accepts backpack-only items");

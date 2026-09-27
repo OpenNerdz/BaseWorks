@@ -1,13 +1,151 @@
-# Nearby Craft 1.8.0
+# Nearby Craft 2.0.6
+
+## Production reliability and job estimates (2.0.6)
+
+- Available components use the game's crafting ingredient rules, including items
+  whose metadata prevents ordinary storage stacking. Items with installed mods
+  and locked storage slots remain protected. Ready ingredients take priority over
+  alternate recipes that would require making more components.
+- Forge input balancing also splits existing unstarted stacks across spare lanes,
+  preserving each active smelting item and its timer. Existing assignments are
+  counted once and resume as rolling batches.
+- Taking output through the native workstation UI counts toward the job's
+  completion. Partial pickups and automatic collection can be combined; completion
+  history records the manually collected quantity. Cancelling a queue does not
+  count as collecting its output.
+- Each job shows an approximate ETA using remaining native timers, staged crafting
+  speeds, parallel machines, shared queues, ingredient production, smelting and
+  collection. Waiting/paused jobs show a reason. Estimates assume the area stays
+  loaded and automation can run; full-batch dependency estimates are conservative
+  because rolling production may finish sooner. Hover for details.
+- Recipe staging is reused within each scheduler tick. Forge probes reject material
+  shortages before cloning inventories, distribution operates on chunks, and UI
+  estimates refresh only on the Jobs page every two seconds with a time budget.
+
+Existing saves and settings are compatible. Restart the game after updating.
+Automated and game-assembly checks passed; this update's native UI/Harmony test
+fixture still needs an isolated in-game run (see `TESTING.md`).
+
+## Mirrored model details fixed (2.0.5)
+
+The console body was upright, but its keypad, screen and printed labels were
+mirrored in-game. The runtime mesh now uses the correct Blender-to-game
+handedness and triangle winding, retaining the same front-facing direction and
+saved block rotations. The workshop and locker use the same corrected export.
+
+## Existing-block facing restoration (2.0.4)
+
+Restored the custom mesh's original front-facing direction for consoles already
+placed in a save. The upright-only placement rule from 2.0.3 remains for new
+placements. Neither update rewrites saved block rotations.
+
+## Upright placement rule (2.0.3)
+
+The floor-standing console and
+workshop also use upright-only placement, like the locker; their former
+`Basic90` rule permitted additional placement rotations. The visual colliders
+follow the meshes. Block identities, inventories and saved machine state are
+unchanged. This rule did not address the mirrored print shown in the screenshot.
+
+## Custom block models (2.0.2)
+
+The storage console's four tiers, workshop controller and loadout locker now use
+the original `design/game_blocks` Blender models and matching icons. As in
+DeepBore, the game builds cached prefabs from Blender-exported meshes and PNG
+textures at runtime, with no Unity Editor or asset bundle required. Each model
+has three LODs, a simple collider and shared 1024px texture atlases. An isolated
+main-menu engine smoke test passed all 50 model-hook, material and GPU-render
+assertions. Placement, facing, interaction and upgrade visuals still need a
+disposable-world check before relying on a main save.
+
+## Frametime maintenance (2.0.1)
+
+The storage terminal still checks nearby chests every two seconds, but now rebuilds its item catalog and redraws the grid only when a chest, slot lock, stack or overflow count actually changes. In-place stack changes are detected, so crafting and transfers remain visible. Workshop planning stages recipes reachable from enabled orders instead of preparing unrelated recipes every tick; an idle controller skips recipe staging altogether. This reduces recurring main-thread work without changing the two-second refresh interval or inventory transaction rules.
+
+Recipe candidate estimates share one inventory count snapshot per scheduling decision, while actual transfers still validate live chest contents. For a low-volume timing breakdown, set `ProfileWorkshopTicks` to `true` in the installed `config.json`; the log then reports average and maximum workshop tick time plus storage, discovery, machine-service and scheduler phases every ten active ticks. Turn it off after profiling.
+
+The Storage Console now has a prominent **Storage / Production** section switch below its title. It shows current job/paused context, and Production has a clearly named **STORAGE** return action. The production layout uses the game's own headers, icons and button treatment with darker readable panels: browse recipes on the left, set a **New Request** below, then track it in **Jobs**, **Workstations**, **Completed** or **Settings** on the right. Requirements separate the machine from its materials; helper text remains readable against bright outdoor scenes.
 
 A local-world quality-of-life mod for **7 Days to Die V3.2 b10**. Craft using nearby supplies, manage storage and production from one console, and exchange activity loadouts. Easy Anti-Cheat must be off. This release adds automation only, not Radio Contracts or other quests.
+
+## Continuous production overhaul (2.0.0)
+
+Forge assignments now run as a pipeline. As soon as enough internal material has smelted for a useful
+chunk, that chunk enters the native crafting queue while the remaining raw inputs continue smelting.
+The exact unqueued remainder stays reserved and persists across settings reloads, so continuous
+production neither waits for an entire large allocation nor duplicates it.
+
+Production now supports safe non-stackable outputs such as Cement Mixers, Forges and Workbenches.
+It also supports the vanilla fixed-tier forge tools Anvil, Cooking Pot and Cooking Grill while
+preserving their native tier in queue, capacity and storage transactions. Variable-quality weapons,
+armour and tools remain in the normal player crafting interface because automation must not guess a
+quality.
+
+The recipe browser opens on a compact **READY** view containing unlocked recipes for enabled nearby
+machines. **ALL** exposes the complete supported catalog, and typing a search always searches that full
+catalog so missing-machine and locked recipes remain discoverable. The request action now states when
+a compatible workstation is missing instead of creating a silently blocked order. Recipe requirements
+use two full-size lines, machine rows distinguish active crafting from the remaining smelting work, and
+job status explains that rolling batches start as soon as materials are ready.
+
+**Acceptance status:** 2.0.0 passed the complete standalone matrix and a 157-assertion isolated V3.2
+engine run. The native fixture verified real partial-Cement rolling, exact remainder persistence,
+Cement Mixer and Anvil catalog eligibility, variable-quality equipment exclusion, full production,
+stock mode, history, console upgrades and save/unload/reload recovery. All production views were
+captured at 1600x1000; the normal save was never opened. See TESTING.md for the evidence matrix.
+
+## Whole-job production planning (1.9.0)
+
+Production now builds a complete recursive bill of materials before assigning machines. The request
+panel reports **MAX NOW** and the actual missing base component; its compact **MAX** shortcut selects
+the largest currently feasible request. Requests above that amount remain valid: automation makes the
+feasible portion and clearly waits for the shortage rather than silently stalling.
+
+Stored components are logically reserved for their planned step and earlier job before transactions
+commit. Shared inputs therefore cannot be consumed by one dependency when another dependency or the
+final recipe needs them. Reservations are recalculated from real storage, pending native output and
+forge material every scheduling pass; live inventories remain authoritative and every withdrawal still
+uses the existing atomic snapshot validation.
+
+The planner tries viable recipe alternatives, maximizes producible output first, and then chooses the
+path with the shortest estimated completion time using available compatible machines. It rejects
+dependency cycles and self-consuming/zero-gain recovery recipes. In particular, the vanilla forge
+recipe that converts four glass units back to one Crushed Sand can no longer feed Crushed Sand into a
+forge to manufacture itself; automated Sand production uses the productive cement-mixer recipe.
+
+## Capacity-aware production batches (1.8.3)
+
+Production no longer limits every machine to ten recipe cycles. Each free workstation now receives
+the largest native batch that safely fits the outstanding request, available ingredients, workstation
+output and connected storage. Faster compatible machines still receive proportionally more work.
+
+Large-batch selection uses bounded binary preflights rather than one trial per item. Payment, fuel,
+output reservations and queue placement still commit atomically, and occupied native queues remain
+untouched. Requests beyond the game's 32,767-cycle native multiplier continue automatically in the
+next capacity-aware batch.
+
+## Native production screen and truthful queue state (1.8.2)
+
+Production keeps every existing control but now follows the compact vanilla crafting layout: unbranded
+game headers, a normal recipe toolbar, visible recipe requirements, neutral native buttons and a single
+Queue/Workstations/History/Settings strip. Decorative onboarding chrome and unused spacing were removed.
+
+An occupied mixer no longer makes an active order look stalled. The job row reports how many products
+are currently crafting or awaiting collection, then gives the real condition for the next batch.
+
+## Workbench craft-button fix (1.8.1)
+
+Nearby ingredient totals and the Craft button now use the same native item-matching rule. Ordinary
+components with harmless internal value differences no longer appear available while leaving Craft
+disabled. Installed modifications remain protected, and exact matching for storage transfers and
+loadouts is unchanged.
 
 ## Faster assignments, completed history (1.8.0)
 
 **Search → click an item → choose a quantity → CRAFT.** That click starts automation; there is no
 separate RUN step. Select **KEEP STOCKED** instead to maintain a network total. Recipe results are
 clickable, show item icons and machine requirements, and put unlocked recipes with matching
-connected machines first. Quantity shortcuts offer 1, 10, 100 and 1000; typing an exact amount works too.
+connected machines first. Quantity shortcuts offer 1, 10, 100, 1000 and MAX; typing an exact amount works too.
 
 The request panel stays on the left. **JOBS** on the right shows only real jobs, with plain-language
 state badges: preparing, smelting, crafting, waiting, needs supplies, done or in stock. Each row shows
@@ -26,8 +164,8 @@ larger batches; small requests prefer the quickest available compatible machine.
 alternatives are compared by time per output. Matching/preloaded material breaks timing ties.
 New raw supply is balanced across the available smelting slots, including two- and three-slot
 layouts. Every missing material gets room first, so iron cannot crowd out required clay. Existing
-stacks and their in-progress smelting timers are never rearranged. Each order still gets an initial
-scheduling opportunity before spare capacity is filled.
+stacks and their in-progress smelting timers are never rearranged. Active jobs are planned in visible
+order, so an earlier request reserves scarce shared components before later requests.
 Missing intermediate ingredients can prepare concurrently on different kinds of machine.
 
 Each forge's planned product and quantity are remembered in `workshops.json` while it smelts and
@@ -43,7 +181,11 @@ smelted units between forges, interrupt native queues or assign permanent materi
 It uses native speeds rather than accelerating timers. Existing tool upgrades must be installed manually.
 Native inventory, queue and world-save limitations below still apply.
 
-**Acceptance status:** 1.8.0 builds, standalone checks and isolated V3.2 b10 gameplay checks pass.
+**Acceptance status:** 1.9.0 passed its complete standalone matrix and a 126-assertion isolated V3.2
+engine run. The native fixture verified maximum/missing-material preview, the MAX action, shared
+component reservations, rejection of the circular forge Sand recipe, real forge/mixer operation,
+save/reload recovery and a capacity-aware 120-cycle mixer batch. The normal save was never opened.
+Full evidence and remaining live coverage are documented in TESTING.md.
 Native checks cover installed-tool timing, parallel forge inputs, exact output collection,
 Completed/Repeat, stock replenishment and world save/unload/reload with smelting underway.
 See TESTING.md for evidence, visual checks and remaining manual coverage.
@@ -84,8 +226,8 @@ Also fixes the Workshop Controller's 24 fractional button-label coordinates that
 ## Unified storage and production
 
 A **Storage Console is now also the machine manager**. No second block is required. Place one near
-your chests and machines, press **E**, then **PRODUCTION**. **JOBS**, **MACHINES** and **COMPLETED**
-share the recipe picker; **BACK** returns to storage. Existing Workshop Automation Controllers remain
+your chests and machines, press **E**, then use the **PRODUCTION** section beside Storage. **JOBS**, **WORKSTATIONS**, **COMPLETED** and **SETTINGS**
+share the recipe picker; **STORAGE** returns to the connected storage view. Existing Workshop Automation Controllers remain
 optional production access panels linked to a console; opening production from a console reuses
 an existing linked controller when there is one.
 
@@ -105,12 +247,12 @@ an existing linked controller when there is one.
    crafts missing intermediate ingredients,
    with cycle detection and an eight-level dependency limit. For example, stone can become sand
    and forge cement before being combined into concrete in a mixer.
-6. Use **MACHINES** to inspect assignments, queues, fuel, positions and blocked states. Enable/Disable
+6. Use **WORKSTATIONS** to inspect assignments, queues, fuel, positions and blocked states. Enable/Disable
    includes/excludes a machine from feeding, fuel and collection. Exclusion does not cancel native work.
 
 There are **24 production entries and 24 machines per manager**, shown six per page. Earlier
-entries get the first opportunity in each scheduling pass. A native batch is at most ten recipe cycles; the manager tries smaller
-batches when ingredients or space limit production. KEEP STOCK never exceeds its stock goal, so
+entries get the first opportunity in each scheduling pass. Each native batch expands to the largest
+safe amount and contracts when ingredients or output space limit production. KEEP STOCK never exceeds its stock goal, so
 a deficit smaller than one full recipe yield waits. A one-time job's "to queue" count reaches zero
 when its batches have been submitted. New one-time jobs enter Completed only after their recorded
 queued quantity has actually been collected into connected storage and matching machine work has
@@ -184,13 +326,19 @@ does not refuel its miners.
 
 ### Block appearance
 
-The console family uses the game's industrial control-panel prefab, with teal/green/blue/violet
-tier accents. The optional workshop panel uses amber; the loadout node uses the native tall metal
-locker. The production interface uses the game's native headers, grey panels, black borders, fonts,
+The console family, workshop controller and loadout locker use the original scavenged-industrial
+models in `design/game_blocks`: chipped paint, field repairs, dim displays and matching icons.
+All four console tiers have distinct models. A narrowly scoped runtime loader follows the proven
+DeepBore pattern: compressed Blender mesh data and shared 1024px texture atlases become cached
+Unity prefabs without needing the Unity Editor or an asset bundle. If an asset fails to load,
+the affected block falls back to its previous vanilla visual; inventory and machine data are
+unchanged. The production interface uses the game's native headers, grey panels, black borders, fonts,
 button states and green primary action. Its two-panel layout follows the base crafting and
 workstation screens: find an item and set the request on the left, then monitor jobs and machines
-on the right. Status colors remain limited to state badges. These native assets fit the existing
-blocks; no custom Blender model or Unity asset bundle is necessary.
+on the right. Each job uses a large item name, outlined state badge, delivery/stock goal and a
+full-size plain-language activity line; the longer diagnostic remains available as a tooltip.
+Status colors remain limited to state badges. The 3D models are original Blender assets; no Unity
+asset bundle is required. Verify this model update in a disposable world before using a main save.
 
 ## Storage consoles and upgrades
 
@@ -254,7 +402,7 @@ Do not combine with Beyond Storage, ProxiCraft, Craft From Containers or another
 ## Installation and updating
 
 1. Close the game and back up saves, generated worlds and the old mod.
-2. Extract `NearbyCraft-1.8.0-V3.2.zip` into `Mods` so the manifest is `Mods/NearbyCraft/ModInfo.xml`.
+2. Extract `NearbyCraft-2.0.6-V3.2.zip` into `Mods` so the manifest is `Mods/NearbyCraft/ModInfo.xml`.
 3. Preserve your existing `config.json`, `loadouts.json`, `workshops.json` and their backups when updating. Missing settings use defaults.
 4. Start the game with Easy Anti-Cheat disabled.
 5. Test automation and the existing controls in a disposable world before using valuable supplies. Never remove/downgrade the mod with its custom blocks still placed; restore the matching pre-update world and mod together.

@@ -14,16 +14,16 @@ internal static class WorkshopTests
 
         check(WorkshopRules.BatchesNeeded(500, 300, 40, 160, 1) == 0, "Workshop counts stored + output + native queue toward target");
         check(WorkshopRules.BatchesNeeded(20, 19, 0, 0, 2) == 0, "Workshop never overshoots a target with a multi-output recipe");
-        check(WorkshopRules.BatchesNeeded(500, 300, 0, 0, 1) == 10, "Workshop bounds each queue batch");
+        check(WorkshopRules.BatchesNeeded(500, 300, 0, 0, 1) == 200, "Workshop exposes the full safe native batch demand");
         check(WorkshopRules.BatchesNeeded(5, 0, 0, 0, 0) == 0, "Malformed recipe cannot divide by zero");
         check(WorkshopRules.BatchesNeeded(500, long.MaxValue, 0, 0, 1) == 0, "Huge stock count cannot wrap into a craft request");
         check(WorkshopRules.OrderBatches(1, 2) == 1, "One-shot orders round to one complete recipe yield");
         check(WorkshopRules.OrderBatches(0, 2) == 0 && WorkshopRules.OrderBatches(1, 0) == 0, "Completed and invalid orders cannot schedule");
-        check(WorkshopRules.OrderBatches(int.MaxValue, 1) == 10, "Large orders are bounded without overflow");
+        check(WorkshopRules.OrderBatches(int.MaxValue, 1) == short.MaxValue, "Large orders respect the native multiplier without overflow");
         check(WorkshopRules.ShareBatches(24, 1, 3, true) == 8, "Demand splits evenly across spare machines");
         check(WorkshopRules.ShareBatches(1, 2, 3, true) == 1 && WorkshopRules.ShareBatches(1, 2, 3, false) == 0,
             "Whole-yield rounding only applies to one-time orders");
-        check(WorkshopRules.ShareBatches(long.MaxValue, 2, 24, true) == 10, "Huge demand cannot overflow batch sharing");
+        check(WorkshopRules.ShareBatches(long.MaxValue, 2, 24, true) == short.MaxValue, "Huge demand cannot overflow batch sharing");
         check(WorkshopRules.ShareBatches(1, 0, 3, true) == 0 && WorkshopRules.ShareBatches(10, 1, 0, true) == 0,
             "Invalid yield or missing machines cannot allocate");
         check(WorkshopRules.FeedCount(50, 10, 20, 5, 100) == 4, "Forge counts already smelted and currently smelting units");
@@ -121,7 +121,7 @@ internal static class WorkshopTests
             int target = random.Next(1, 100001), stored = random.Next(0, 100001);
             int waiting = random.Next(0, 5000), queued = random.Next(0, 5000), yield = random.Next(1, 1001);
             int batches = WorkshopRules.BatchesNeeded(target, stored, waiting, queued, yield);
-            check(batches >= 0 && batches <= 10 && (batches == 0 || (long)stored + waiting + queued + batches * yield <= target),
+            check(batches >= 0 && batches <= short.MaxValue && (batches == 0 || (long)stored + waiting + queued + batches * yield <= target),
                 "Randomized workshop target cannot overproduce");
             chest = new[] { Stack(3, random.Next(1, 101)), ItemStack.Empty.Clone() };
             output = new[] { Stack(3, random.Next(1, 301)), Stack(4, random.Next(1, 301)) };

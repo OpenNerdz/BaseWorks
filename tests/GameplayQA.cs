@@ -24,7 +24,7 @@ namespace NearbyCraft
 
     public sealed class NearbyCraftGameplayQaRunner : MonoBehaviour
     {
-        private const string Save = "NC_QA_180_20260921_F";
+        private const string Save = "NC_QA_UI_20260922_B";
         private int checks;
         private bool isolated;
         private void Check(bool condition, string message)
@@ -64,7 +64,7 @@ namespace NearbyCraft
         { var button = group.GetChildById(name); Check(button != null, "UI control " + name); button.Pressed(-1); }
         private void RequestLabels(XUiController group, string phase)
         {
-            foreach (string name in new[] { "workshopOnce", "workshopStock", "workshopAdd", "workshopAmount", "workshopQty10", "workshopQty100", "workshopQty1000" })
+            foreach (string name in new[] { "workshopOnce", "workshopStock", "workshopAdd", "workshopAmount", "workshopQty10", "workshopQty100", "workshopQty1000", "workshopQtyMax" })
                 foreach (var label in group.GetChildById(name).ViewComponent.uiTransform.GetComponentsInChildren<UILabel>(true))
                 {
                     Log.Out("[NearbyCraft GameplayQA] Caption " + phase + " / " + name + " text=" + label.text
@@ -77,6 +77,19 @@ namespace NearbyCraft
                         && label.drawCall != null && label.drawCall.isActiveAndEnabled,
                         phase + " caption geometry: " + name);
                 }
+        }
+        private void JobLabels(XUiController group, string phase)
+        {
+            foreach (string name in new[] { "workshopCatalogLabel", "workshopName0", "workshopPhase0", "workshopGoal0", "workshopDetail0" })
+            {
+                var control = group.GetChildById(name);
+                Check(control != null, phase + " job text control: " + name);
+                var label = control.ViewComponent.uiTransform.GetComponentsInChildren<UILabel>(true).FirstOrDefault();
+                Check(label != null && label.gameObject.activeInHierarchy && label.isVisible
+                    && label.CalculateFinalAlpha(Time.frameCount) > .9f && label.geometry.hasVertices
+                    && label.drawCall != null && label.drawCall.isActiveAndEnabled,
+                    phase + " readable job text geometry: " + name);
+            }
         }
         private IEnumerator Run()
         {
@@ -172,13 +185,48 @@ namespace NearbyCraft
                     "nearby crafting commits player and storage ingredients together");
                 Check(removed.Sum(s => s.count) == 15, "nearby crafting reports the exact committed ingredients");
 
+                var mixerRecipe = XUiM_Recipes.GetRecipes().First(r => r.GetName() == "cementMixer");
+                inventory.SetBackpackItemStacks(ItemStack.CreateArray(originalBackpack.Length));
+                storage.items = ItemStack.CreateArray(originalStorage.Length);
+                int mixerParts = 0;
+                for (int i = 0; i < mixerRecipe.ingredients.Count; i++)
+                {
+                    ItemStack ingredient = mixerRecipe.ingredients[i].Clone();
+                    ingredient.itemValue.Meta = 70 + i;
+                    ingredient.itemValue.Seed = (ushort)(900 + i);
+                    ingredient.itemValue.Flags ^= ItemValue.cFlagsActivated;
+                    storage.items[i] = ingredient;
+                    mixerParts += ingredient.count;
+                }
+                box.SetModified();
+                StorageIndex.ForceFreshForCraft();
+                Check(CraftingBridge.HasItems(inventory, mixerRecipe.ingredients, 1),
+                    "cement mixer Craft-button bridge accepts nearby ingredients using native item matching");
+                removed.Clear();
+                StorageIndex.RemoveItems(inventory, mixerRecipe.ingredients, 1, removed);
+                Check(storage.items.All(s => s == null || s.IsEmpty()) && removed.Sum(s => s.count) == mixerParts,
+                    "cement mixer consumes exactly its nearby recipe components");
+
                 testBackpack = ItemStack.CreateArray(originalBackpack.Length);
                 testBackpack[0] = Stack("resourceMechanicalParts", 5);
                 inventory.SetBackpackItemStacks(testBackpack);
                 storage.items = ItemStack.CreateArray(originalStorage.Length);
                 box.SetModified();
                 var transactionSession = new StorageNetworkSession(world, player, p, NearbyCraftMod.Config);
-                transactionSession.Rescan();
+                Check(transactionSession.Rescan() && !transactionSession.Rescan(),
+                    "unchanged terminal inventories skip repeat catalog rebuilds");
+                storage.items[0] = Stack("resourceMechanicalParts", 1);
+                Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 1,
+                    "a new chest stack refreshes the terminal catalog");
+                storage.items[0].count++;
+                Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 2,
+                    "in-place stack count changes refresh the terminal catalog");
+                storage.items[0].count--;
+                Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 1,
+                    "restoring an in-place stack count refreshes the catalog again");
+                storage.items[0] = ItemStack.Empty.Clone();
+                Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 0,
+                    "emptying a chest stack refreshes the catalog");
                 Check(transactionSession.DepositBackpack(inventory, false) == 5
                     && inventory.GetBackpackItemStacks().All(s => s.IsEmpty())
                     && Count(storage, "resourceMechanicalParts") == 5,
@@ -187,7 +235,24 @@ namespace NearbyCraft
                 storage.items = ItemStack.CreateArray(originalStorage.Length);
                 storage.items[0] = Stack("resourceMechanicalParts", 10);
                 box.SetModified();
-                transactionSession.Rescan();
+                Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 10,
+                    "external chest replacement refreshes the terminal catalog");
+                Check(!transactionSession.Rescan(), "unchanged replacement is not redrawn repeatedly");
+                PackedBoolArray locks = storage.SlotLocks;
+                if (NearbyCraftMod.Config.RespectLockedSlots && storage.HasSlotLocksSupport
+                    && locks != null && locks.Length > 0)
+                {
+                    bool originalLock = locks[0];
+                    try
+                    {
+                        locks[0] = true;
+                        Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 0,
+                            "locking a chest slot removes its stack from the terminal catalog");
+                    }
+                    finally { locks[0] = originalLock; }
+                    Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 10,
+                        "unlocking a chest slot restores its stack to the terminal catalog");
+                }
                 bool applied = false, rolledBack = false;
                 LoadoutSwapResult swap;
                 bool exchanged = transactionSession.TryExchangeLoadout(
@@ -230,13 +295,86 @@ namespace NearbyCraft
             Check(StorageTerminalManager.ActiveSession.IsAvailable, "storage session passes access and distance checks");
             Check(ui.DragAndDropWindow.CurrentStack.IsEmpty(), "cursor is empty before navigating");
             Check(ui.FindWindowGroupByName(WorkshopManager.WindowGroupId) is XUiC_WorkshopWindowGroup, "production window controller resolves");
+            var storageGroup = ui.FindWindowGroupByName(StorageTerminalManager.WindowGroupId);
+            Check(storageGroup.GetChildById("terminalSections") != null, "storage and production have a dedicated section switch");
+            string productionSummary = "";
+            storageGroup.GetBindingValueInternal(ref productionSummary, "terminal_production_summary");
+            Check(productionSummary == "PLAN JOBS & MACHINES", "new networks explain the production entry");
+            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-storage.png"));
+            yield return new WaitForSecondsRealtime(1);
             Click(ui.FindWindowGroupByName(StorageTerminalManager.WindowGroupId), "nearbyCraftTerminalProduction");
             yield return null;
             var group = ui.FindWindowGroupByName(WorkshopManager.WindowGroupId);
             Check(player.PlayerUI.windowManager.IsWindowOpen(WorkshopManager.WindowGroupId), "production opens from storage");
             Check(WorkshopStore.Get(p) != null && !WorkshopStore.Get(p).Enabled && WorkshopStore.Get(p).Console == p, "single console self-links and starts paused");
+            Click(group, "workshopStorage");
+            yield return null;
+            Check(StorageTerminalManager.IsOpen, "Storage returns from Production to the same console");
+            storageGroup.GetBindingValueInternal(ref productionSummary, "terminal_production_summary");
+            Check(productionSummary == "AUTOMATION PAUSED", "section switch reports the live controller state");
+            Click(storageGroup, "nearbyCraftTerminalProduction");
+            yield return null;
+            Check(player.PlayerUI.windowManager.IsWindowOpen(WorkshopManager.WindowGroupId), "section switch reopens Production");
+            var productionMixerRecipe = XUiM_Recipes.GetRecipes().First(r => r.GetName() == "cementMixer");
+            var productionAnvilRecipe = XUiM_Recipes.FilterRecipesByWorkstation("forge", XUiM_Recipes.GetRecipes())
+                .First(r => r.GetName() == "toolAnvil");
+            var variableQualityRecipe = XUiM_Recipes.GetRecipes().First(r => r.GetName() == "gunHandgunT1Pistol");
+            Check(WorkshopManager.Productive(productionMixerRecipe), "non-stackable Cement Mixer is eligible for production");
+            Check(WorkshopManager.Productive(productionAnvilRecipe), "fixed-tier Anvil is eligible for production");
+            Check(!WorkshopManager.Supported(variableQualityRecipe), "variable-quality equipment stays in native player crafting");
+            string catalogMode = "";
+            group.GetBindingValueInternal(ref catalogMode, "workshop_catalog_mode");
+            Check(catalogMode == "READY", "recipe catalog defaults to the compact ready-machine view");
+            Click(group, "workshopCatalogMode");
+            group.GetBindingValueInternal(ref catalogMode, "workshop_catalog_mode");
+            Check(catalogMode == "ALL", "recipe catalog can expose every supported recipe");
+            Click(group, "workshopCatalogMode");
+            ((XUiC_TextInput)group.GetChildById("workshopSearch")).Text = "cementMixer";
+            yield return null;
+            string catalogResult = "";
+            group.GetBindingValueInternal(ref catalogResult, "workshop_result_name0");
+            Check(catalogResult == Localization.Get("cementMixer"), "search finds Cement Mixer even outside the compact ready list");
+            ((XUiC_TextInput)group.GetChildById("workshopSearch")).Text = "toolAnvil";
+            yield return null;
+            group.GetBindingValueInternal(ref catalogResult, "workshop_result_name0");
+            Check(catalogResult == Localization.Get("toolAnvil"), "search finds fixed-tier Anvil production");
             ((XUiC_TextInput)group.GetChildById("workshopSearch")).Text = "resourceConcreteMix";
             Click(group, "workshopResult0");
+            string requestRequirements = "";
+            group.GetBindingValueInternal(ref requestRequirements, "workshop_recipe");
+            Check(requestRequirements.Contains("\n") && requestRequirements.StartsWith(Localization.Get("cementMixer")),
+                "request card separates the workstation from its material requirements");
+
+            var forgeSand = XUiM_Recipes.FilterRecipesByWorkstation("forge", XUiM_Recipes.GetRecipes())
+                .First(r => r.GetName() == "resourceCrushedSand" && r.materialBasedRecipe);
+            var mixerSand = XUiM_Recipes.FilterRecipesByWorkstation("cementMixer", XUiM_Recipes.GetRecipes())
+                .First(r => r.GetName() == "resourceCrushedSand" && !r.materialBasedRecipe);
+            Check(!WorkshopManager.Productive(forgeSand) && WorkshopManager.Productive(mixerSand),
+                "native forge recovery Sand recipe is rejected while the productive mixer recipe remains available");
+
+            var planningNetwork = new StorageNetworkSession(world, player, p, NearbyCraftMod.Config, p, true);
+            planningNetwork.Rescan(false);
+            var planningBank = new WorkshopReservationBank();
+            var planningController = WorkshopStore.Get(p);
+            var productionPlanner = new WorkshopProductionPlanner(planningNetwork, player, ui, planningController,
+                workstations, planningController.AutoCraft);
+            int rockType = ItemClass.GetItem("resourceRockSmall").type;
+            int concreteType = ItemClass.GetItem("resourceConcreteMix").type;
+            var thousandPlan = productionPlanner.Plan(concreteType, 1000, productionPlanner.CreatePool(), planningBank);
+            Check(thousandPlan.Maximum > 0 && thousandPlan.Maximum < 1000 && !string.IsNullOrEmpty(thousandPlan.Missing),
+                "whole-job planner reports a partial maximum and missing base component for 1,000 Concrete Mix");
+            Check(planningBank.Reserved(rockType) > 0 && planningBank.Reserved(rockType) <= 1000,
+                "whole-job planner reserves the available Stone across Sand, Cement and final Concrete steps");
+            ((XUiC_TextInput)group.GetChildById("workshopAmount")).Text = "1000";
+            yield return null;
+            string planningHint = "";
+            group.GetBindingValueInternal(ref planningHint, "workshop_mode_hint");
+            Check(planningHint.Contains("MAX NOW " + thousandPlan.Maximum) && planningHint.Contains("MISSING"),
+                "production screen shows the planner maximum and missing component before the request is submitted");
+            Click(group, "workshopQtyMax");
+            Check(((XUiC_TextInput)group.GetChildById("workshopAmount")).Text == thousandPlan.Maximum.ToString(),
+                "MAX selects the complete plan's currently craftable quantity");
+
             foreach (int n in new[] { 1, 10, 100, 1000 })
             {
                 Click(group, "workshopQty" + n);
@@ -256,13 +394,30 @@ namespace NearbyCraft
             Check(WorkshopStore.Get(p).Smelting.Count >= 2, "native production spreads cement preparation across multiple forges");
             Check(workstations.Where(s => s.block.GetBlockName() == "forge").Any(s => s.Input.Take(s.InputSlotCount).Count(i => !i.IsEmpty()) > 1),
                 "native forge receives split raw material in parallel input lanes");
+            var rollingJob = WorkshopStore.Get(p).Smelting.First(j => j.Item == "resourceCement" && j.Batches > 1);
+            var rollingForge = workstations.First(s => s.ToWorldPos() == rollingJob.Position);
+            var rollingRecipe = WorkshopManager.PrepareRecipe(cementRecipe, ui, rollingForge);
+            int rollingBefore = rollingJob.Count;
+            for (int step = 0; step < 2000 && WorkshopMachines.MaterialBatches(rollingForge, rollingRecipe, false) == 0; step++)
+                rollingForge.HandleMaterialInput(.25f);
+            Check(WorkshopMachines.MaterialBatches(rollingForge, rollingRecipe, false) > 0
+                && WorkshopMachines.MaterialBatches(rollingForge, rollingRecipe, false) < rollingJob.Batches,
+                "native forge has a partial Cement chunk ready before its full allocation");
+            var rollingNetwork = new StorageNetworkSession(world, player, p, NearbyCraftMod.Config, p, true);
+            rollingNetwork.Rescan(false);
+            new WorkshopScheduler(rollingNetwork, player, ui, WorkshopStore.Get(p), workstations).Run();
+            var rollingRemainder = WorkshopStore.Get(p).Smelting.FirstOrDefault(j => j.Position == rollingForge.ToWorldPos());
+            Check(rollingForge.hasRecipeInQueue() && rollingRemainder != null && rollingRemainder.Count > 0
+                && rollingRemainder.Count < rollingBefore,
+                "native forge starts a ready rolling Cement chunk and retains the exact remainder");
             int assigned = WorkshopStore.Get(p).Smelting.Sum(j => j.Count);
             WorkshopStore.Initialize(state);
             Check(WorkshopStore.Get(p).Smelting.Sum(j => j.Count) == assigned, "live smelting assignments survive settings reload");
             yield return new WaitForSecondsRealtime(1);
             Check(!group.GetChildById("workshopRow1").ViewComponent.IsVisible, "unused job rows are hidden");
             RequestLabels(group, "jobs");
-            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-180-orders.png"));
+            JobLabels(group, "jobs");
+            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-orders.png"));
             yield return new WaitForSecondsRealtime(1);
             Click(group, "workshopMachines");
             yield return new WaitForSecondsRealtime(.5f);
@@ -276,7 +431,7 @@ namespace NearbyCraft
             Check(group.GetChildById("productionSearch").ViewComponent.IsVisible
                 && group.GetChildById("machineOverview").ViewComponent.IsVisible, "rendered tab visibility refreshes");
             RequestLabels(group, "machines");
-            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-180-machines.png"));
+            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-machines.png"));
             yield return new WaitForSecondsRealtime(1);
             Click(group, "workshopSettings");
             yield return new WaitForSecondsRealtime(.5f);
@@ -286,16 +441,16 @@ namespace NearbyCraft
             Click(group, "workshopFuel"); Check(WorkshopStore.Get(p).AutoFuel, "Options fuel toggle restores automatic supply");
             yield return new WaitForSecondsRealtime(1);
             RequestLabels(group, "options");
-            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-180-options.png"));
+            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-options.png"));
             yield return new WaitForSecondsRealtime(1);
             for (int capture = 0; capture < 3; capture++)
             {
                 yield return new WaitForSecondsRealtime(.37f);
-                ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-180-options-" + capture + ".png"));
+                ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-options-" + capture + ".png"));
             }
             yield return new WaitForSecondsRealtime(1);
             player.PlayerUI.windowManager.Close(WorkshopManager.WindowGroupId);
-            bool sawForgeInput = false, sawForgeQueue = false, sawMixerQueue = false;
+            bool sawForgeInput = false, sawForgeQueue = false, sawMixerQueue = false, sawAccurateMixerStatus = false;
             deadline = Time.unscaledTime + 90;
             while (Count(storage, "resourceConcreteMix") < 24 && Time.unscaledTime < deadline)
             {
@@ -303,7 +458,14 @@ namespace NearbyCraft
                 {
                     if (station.block.GetBlockName() == "forge")
                     { sawForgeInput |= WorkshopMachines.HasSmeltingInput(station); sawForgeQueue |= station.hasRecipeInQueue(); }
-                    if (station.block.GetBlockName() == "cementMixer") sawMixerQueue |= station.hasRecipeInQueue();
+                    if (station.block.GetBlockName() == "cementMixer" && station.hasRecipeInQueue())
+                    {
+                        sawMixerQueue = true;
+                        string active;
+                        sawAccurateMixerStatus |= WorkshopManager.TargetStatus.TryGetValue(
+                            WorkshopManager.TargetKey(p, "resourceConcreteMix"), out active)
+                            && active.StartsWith("Crafting ") && !active.StartsWith("Waiting ");
+                    }
                     // Speed only the disposable test's native smelting/recipe timers.
                     station.HandleMaterialInput(120f);
                     station.HandleRecipeQueue(120f);
@@ -317,6 +479,7 @@ namespace NearbyCraft
             }
             Check(Count(storage, "resourceConcreteMix") == 24, "stone -> parallel smelted cement + sand -> concrete returns exactly twenty-four items");
             Check(sawForgeInput && sawForgeQueue && sawMixerQueue, "real forge input and native forge/mixer queues were used");
+            Check(sawAccurateMixerStatus, "busy mixer status reports active crafting instead of a false free-machine wait");
             Check(Count(storage, "resourceRockSmall") < 1000 && Count(storage, "resourceWood") < 200, "actual stone and fuel were consumed");
             Check(WorkshopStore.Get(p).Targets[0].Remaining == 0, "one-time order records committed progress");
             Check(WorkshopStore.Get(p).Completed.Count == 1 && WorkshopStore.Get(p).Completed[0].Produced == 24
@@ -329,7 +492,7 @@ namespace NearbyCraft
             string historyPage = ""; group.GetBindingValueInternal(ref historyPage, "workshop_page");
             Check(historyPage.StartsWith("HISTORY") && group.GetChildById("workshopRow0").ViewComponent.IsVisible,
                 "Completed tab displays persisted finished request");
-            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-180-completed.png"));
+            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-completed.png"));
             yield return new WaitForSecondsRealtime(1);
             Click(group, "workshopToggle0");
             Check(((XUiC_TextInput)group.GetChildById("workshopAmount")).Text == "24"
@@ -407,6 +570,46 @@ namespace NearbyCraft
             Check(WorkshopStore.Get(p) != null && WorkshopStore.Get(p).Targets.Count == 1, "native console tier upgrade preserves orders");
             WorkshopStore.Initialize(state);
             Check(WorkshopStore.Get(p).Targets[0].Target == 24 && !WorkshopStore.Get(p).Enabled, "settings reload retains orders and pause state");
+            Check(WorkshopStore.Edit(p, c =>
+            {
+                c.Targets.Clear(); c.Smelting.Clear(); c.Enabled = true;
+                c.Targets.Add(new WorkshopTarget { Item = "resourceCrushedSand", Once = true, Target = 120,
+                    Remaining = 120, TrackDelivery = true });
+            }, out error), "prepare adaptive native mixer order");
+            var mixer = workstations.First(s => s.block.GetBlockName() == "cementMixer");
+            deadline = Time.unscaledTime + 10;
+            while (!mixer.hasRecipeInQueue() && Time.unscaledTime < deadline) yield return null;
+            var adaptive = mixer.Queue.LastOrDefault(q => q != null && q.Recipe != null && q.Multiplier > 0);
+            Check(adaptive != null && adaptive.Recipe.GetName() == "resourceCrushedSand" && adaptive.Multiplier == 120,
+                "real mixer queues all 120 available cycles in one capacity-aware native batch");
+            var reloadedUi = player.PlayerUI.xui;
+            var adaptiveGroup = reloadedUi.FindWindowGroupByName(WorkshopManager.WindowGroupId) as XUiC_WorkshopWindowGroup;
+            if (adaptiveGroup != null) adaptiveGroup.SetPosition(p);
+            player.PlayerUI.windowManager.Open(WorkshopManager.WindowGroupId, true);
+            yield return new WaitForSecondsRealtime(1);
+            Check(adaptiveGroup != null
+                && player.PlayerUI.windowManager.IsWindowOpen(WorkshopManager.WindowGroupId)
+                && adaptiveGroup.GetChildById("workshopRow0").ViewComponent.IsVisible,
+                "adaptive production queue remains visible in the native-style screen");
+            JobLabels(adaptiveGroup, "adaptive");
+            ScreenCapture.CaptureScreenshot(Path.Combine(root, "..", "production-ui-final-adaptive.png"));
+            yield return new WaitForSecondsRealtime(1);
+            string etaLabel = "";
+            adaptiveGroup.GetBindingValueInternal(ref etaLabel, "workshop_eta0");
+            Check(etaLabel.StartsWith("ETA: ~"), "active native crafting exposes a numeric job completion estimate");
+            // Stay in one frame so automatic collection cannot race this
+            // simulated native UI take-all operation in the disposable world.
+            mixer.HandleRecipeQueue(100000f);
+            Check(WorkshopManager.CountOutput(mixer, ItemClass.GetItem("resourceCrushedSand").type) >= 120,
+                "native mixer finishes the adaptive batch before manual collection");
+            new XUiM_Workstation(mixer).SetOutputStacks(ItemStack.CreateArray(mixer.Output.Length));
+            Check(WorkshopStore.Get(p).Targets[0].Returned == 120 && WorkshopStore.Get(p).Targets[0].CollectedManually == 120,
+                "Harmony output-model hook records take-all before an automation tick");
+            var manualNetwork = new StorageNetworkSession(world, player, p, NearbyCraftMod.Config, p, true);
+            manualNetwork.Rescan(false);
+            new WorkshopScheduler(manualNetwork, player, reloadedUi, WorkshopStore.Get(p), workstations).Run();
+            Check(WorkshopStore.Get(p).Targets[0].CompletedUtcTicks > 0,
+                "manually collected native output completes without a permanent wait");
         }
     }
 }

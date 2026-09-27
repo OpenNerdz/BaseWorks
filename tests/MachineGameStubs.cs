@@ -17,7 +17,7 @@ public sealed partial class ItemClass
 public sealed partial class ItemValue
 {
     public ItemValue() { }
-    public ItemValue(int id, int min = 0, int max = 0) { type = id; ItemClassOrMissing = ItemClass.GetForId(id) ?? new ItemClass(); }
+    public ItemValue(int id, int min = 0, int max = 0) { type = id; Quality = min; ItemClassOrMissing = ItemClass.GetForId(id) ?? new ItemClass(); }
     public ItemClass ItemClass => ItemClassOrMissing;
     public bool IsEmpty() => type == 0;
     public void ModifyValue(object entity, object recipe, PassiveEffects effect, ref float value, ref float multiplier, FastTags<TagGroup.Global> tags)
@@ -65,7 +65,7 @@ public partial class TileEntityWorkstation : TileEntity
 }
 public partial class Recipe
 {
-    public int itemValueType, count;
+    public int itemValueType, count, craftingTier;
     public bool materialBasedRecipe;
     public List<ItemStack> ingredients = new();
     public string GetName() => ItemClass.GetForId(itemValueType).Name;
@@ -77,6 +77,8 @@ public partial class RecipeQueueItem
     public short Multiplier;
     public int Quality;
     public float OneItemCraftTime, CraftingTimeLeft;
+    public int StartingEntityId;
+    public bool IsCrafting;
 }
 public partial class World
 {
@@ -126,6 +128,7 @@ namespace NearbyCraft
         private bool IsSourceValid(TestSource source) => IsAvailable;
         private bool IsSlotLocked(TestSource source, int index) => Locks[index];
         internal bool IsAvailable = true, AutomationBusy = false;
+        internal int ProductSnapshotScans;
         internal bool[] Locks;
         internal Action BeforeCommit = null;
         internal StorageNetworkSession(World world, ItemStack[] items) {
@@ -145,6 +148,13 @@ namespace NearbyCraft
             if (!IsAvailable || AutomationBusy || (validate != null && !validate()) || !t.Plan.TryCommit(_ => true)) return false;
             apply?.Invoke();
             return true;
+        }
+        internal Dictionary<int, long> SnapshotProductCounts(bool craftingOnly = false)
+        {
+            ProductSnapshotScans++;
+            return chests.Where((s, i) => !Locks[i] && s != null && !s.IsEmpty() && s.count > 0
+                && (!craftingOnly || !s.itemValue.HasModSlots || !s.itemValue.HasMods()))
+                .GroupBy(s => s.itemValue.type).ToDictionary(g => g.Key, g => g.Sum(s => (long)s.count));
         }
     }
 }

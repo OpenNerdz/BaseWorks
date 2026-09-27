@@ -15,6 +15,7 @@
     <Compile Include="../src/NearbyCraftConfig.cs" Link="NearbyCraftConfig.cs" />
     <Compile Include="../src/WorkshopRules.cs" Link="WorkshopRules.cs" />
     <Compile Include="../src/WorkshopPlanner.cs" Link="WorkshopPlanner.cs" />
+    <Compile Include="../src/WorkshopReservations.cs" Link="WorkshopReservations.cs" />
     <Compile Include="WorkshopTests.cs" />
     <Compile Include="../src/TerminalCatalog.cs" Link="TerminalCatalog.cs" />
     <Compile Include="TerminalCatalogTests.cs" />

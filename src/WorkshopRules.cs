@@ -9,7 +9,9 @@ namespace NearbyCraft
         internal const int MaximumHistory = 60;
         internal const int MaximumStations = 24;
         internal const int MaximumTarget = 100000;
-        internal const int BatchLimit = 10;
+        // RecipeQueueItem.Multiplier is a signed short in the native game API.
+        // Capacity checks below normally impose a much smaller practical limit.
+        internal const int MaximumNativeBatch = short.MaxValue;
 
         // Once usable preloaded material has been considered, share the rest
         // across free machines. A small order cannot be assigned twice.
@@ -17,13 +19,13 @@ namespace NearbyCraft
         {
             if (products <= 0 || yield <= 0 || machines <= 0) return 0;
             long batches = roundUp ? (products - 1) / yield + 1 : products / yield;
-            return batches <= 0 ? 0 : (int)Math.Min(BatchLimit, (batches - 1) / machines + 1);
+            return batches <= 0 ? 0 : (int)Math.Min(MaximumNativeBatch, (batches - 1) / machines + 1);
         }
 
         internal static int OrderBatches(int remaining, int yield)
         {
             return yield <= 0 || remaining <= 0 ? 0
-                : (int)Math.Min(BatchLimit, ((long)remaining + yield - 1) / yield);
+                : (int)Math.Min(MaximumNativeBatch, ((long)remaining + yield - 1) / yield);
         }
 
         internal static int FeedCount(long requiredUnits, long availableUnits, long pendingUnits, int weight, int room)
@@ -49,7 +51,7 @@ namespace NearbyCraft
             long maximum = Math.Max(0, Math.Min(MaximumTarget, target));
             long missing = maximum - Math.Min(maximum, Math.Max(0, stored))
                 - Math.Min(maximum, Math.Max(0, waiting)) - Math.Min(maximum, Math.Max(0, queued));
-            return missing <= 0 ? 0 : (int)Math.Min(BatchLimit, missing / yield);
+            return missing <= 0 ? 0 : (int)Math.Min(MaximumNativeBatch, missing / yield);
         }
 
         internal static int ClampTarget(int target)

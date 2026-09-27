@@ -78,6 +78,7 @@ foreach (var (typeName, methodName, parameterCount) in new[] {
     ("TileEntityWorkstation", "AcceptsMaterial", 1),
     ("TileEntityWorkstation", "HandleMaterialInput", 1),
     ("TileEntityWorkstation", "GetTimerForSlot", 1),
+    ("XUiM_Workstation", "SetOutputStacks", 1),
     ("TileEntityCollector", "IsCurrentStack", 1),
     ("TileEntityCollector", "getCurrentConvertCount", 1),
     ("TileEntityCollector", "fuelCost", 2),
@@ -102,5 +103,11 @@ foreach (var (typeName, fieldName) in new[] {
     total++;
     if (!found) failed++;
 }
+var outputBackend = module.Types.Single(t => t.Name == "XUiC_WorkstationOutputGrid")
+    .Methods.Single(m => m.Name == "UpdateBackend");
+bool manualOutputHook = outputBackend.Body.Instructions.Any(i => i.Operand is MethodReference method
+    && method.DeclaringType.Name == "XUiM_Workstation" && method.Name == "SetOutputStacks");
+total++; if (!manualOutputHook) failed++;
+Console.WriteLine($"{(manualOutputHook ? "PASS" : "FAIL")} Native output UI reaches the manual collection hook");
 Console.WriteLine($"Patch checks: {total - failed}/{total} passed (metadata only; not a runtime Harmony test)");
 Environment.ExitCode = failed == 0 ? 0 : 1;

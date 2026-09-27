@@ -10,7 +10,7 @@ Define(5, "resourceScrapIron", "iron", 5); Define(6, "drinkJarEmpty"); Define(7,
 ItemStack S(int type, int count) => new(new ItemValue(type), count);
 RecipeQueueItem Batch(bool forge = false, int quantity = 2) => new() {
     Recipe = new Recipe { itemValueType = 3, count = 1, materialBasedRecipe = forge, ingredients = new() { S(forge ? 4 : 2, 3) } },
-    Multiplier = (short)quantity, OneItemCraftTime = 10, CraftingTimeLeft = 10
+    Multiplier = (short)quantity, OneItemCraftTime = 10, CraftingTimeLeft = 10, IsCrafting = true, StartingEntityId = 42
 };
 var world = new World();
 TileEntityWorkstation Station(bool forge = false)
@@ -32,6 +32,38 @@ Check(network.QueueBatch(s, Batch(), Array.Empty<ItemStack>(), true, out _, out 
 Check(chest[0].count == 14 && chest[1].count == 8 && s.Fuel[0].count == 2 && s.IsBurning && s.Queue[3].Multiplier == 2,
     "Ingredients, wood, fuel slots and queue commit together");
 Check(!network.QueueBatch(s, Batch(), Array.Empty<ItemStack>(), true, out _, out _) && chest[0].count == 14, "Busy station cannot be charged again");
+
+s = Station(); chest = new[] { S(2, 20), S(1, 20), ItemStack.Empty.Clone() }; network = new StorageNetworkSession(world, chest);
+var fixedQuality = Batch(quantity: 1); fixedQuality.Quality = 1;
+Check(network.QueueBatch(s, fixedQuality, Array.Empty<ItemStack>(), true, out _, out _)
+    && s.Queue[3].Quality == 1, "Fixed-tier workstation output preserves its native queue quality");
+
+s = Station(); chest = new[] { S(2, 17), S(1, 20), ItemStack.Empty.Clone() }; network = new StorageNetworkSession(world, chest);
+Check(network.QueueLargestBatch(s, Batch(quantity: 100), Array.Empty<ItemStack>(), true, out _, out _) == 5,
+    "Adaptive queue uses the largest fully payable batch instead of a fixed ten-cycle chunk");
+Check(chest[0].count == 2 && s.Queue[3].Multiplier == 5 && s.Queue[3].IsCrafting,
+    "Adaptive dry-runs commit ingredients and native queue state exactly once");
+s = Station(); s.Output = Enumerable.Range(0, 6).Select(i => i == 0 ? S(3, 98) : S(2, 100)).ToArray();
+chest = new[] { S(2, 100), S(1, 20), ItemStack.Empty.Clone() }; network = new StorageNetworkSession(world, chest);
+Check(network.QueueLargestBatch(s, Batch(quantity: 100), Array.Empty<ItemStack>(), true, out _, out _) == 2
+    && s.Queue[3].Multiplier == 2 && chest[0].count == 94,
+    "Adaptive queue stops at real workstation output capacity");
+
+s = Station(); chest = new[] { S(2, 12), S(1, 20), ItemStack.Empty.Clone() }; network = new StorageNetworkSession(world, chest);
+var bank = new WorkshopReservationBank();
+var firstClaim = new WorkshopReservationClaim("first");
+var secondClaim = new WorkshopReservationClaim("second");
+firstClaim.Add(2, 6); secondClaim.Add(2, 6); bank.Add(firstClaim); bank.Add(secondClaim);
+Check(network.QueueLargestBatch(s, Batch(quantity: 2), Array.Empty<ItemStack>(), true,
+        bank, firstClaim, out _, out _) == 2 && chest[0].count == 6 && bank.Reserved(2) == 6,
+    "Committed native batch consumes only its own whole-job component reservation");
+s = Station();
+Check(network.QueueLargestBatch(s, Batch(quantity: 2), Array.Empty<ItemStack>(), true,
+        bank, null, out _, out _) == 0 && chest[0].count == 6,
+    "Unclaimed automation cannot spend components reserved by another planned step");
+Check(network.QueueLargestBatch(s, Batch(quantity: 2), Array.Empty<ItemStack>(), true,
+        bank, secondClaim, out _, out _) == 2 && chest[0].IsEmpty() && bank.Reserved(2) == 0,
+    "Second planned step receives and releases its exact reserved components");
 
 foreach (string failure in new[] { "no fuel", "locked wood", "output full", "network full", "in use", "water", "removed", "changed output" })
 {
@@ -61,6 +93,10 @@ s = Station(true); chest = new[] { S(5, 20), S(1, 20), ItemStack.Empty.Clone() }
 Check(network.FeedForge(s, Batch(true).Recipe, 2, true, out _), "Forge feed accepts real raw ore and wood");
 Check(chest[0].count == 18 && s.Input[0].count == 1 && s.Input[1].count == 1 && s.Input[3].count == 0 && s.IsBurning, "Feeding splits input across native lanes without minting units");
 Check(!network.FeedForge(s, Batch(true).Recipe, 2, true, out _) && chest[0].count == 18, "Pending raw ore prevents repeated forge feeding");
+s = Station(true); chest = new[] { S(5, 20), S(1, 20), ItemStack.Empty.Clone() }; network = new StorageNetworkSession(world, chest);
+Check(network.FeedLargestForge(s, Batch(true).Recipe, 50, true, out _) == 33
+    && chest[0].IsEmpty() && s.Input.Take(3).Sum(i => i.count) == 20,
+    "Adaptive forge feed finds the largest supported batch with logarithmic dry-runs");
 s = Station(true); chest = new[] { S(5, 20), ItemStack.Empty.Clone() }; network = new StorageNetworkSession(world, chest);
 Check(!network.FeedForge(s, Batch(true).Recipe, 2, true, out _) && chest[0].count == 20 && s.Input[0].IsEmpty(), "Missing fuel rejects the entire forge feed");
 

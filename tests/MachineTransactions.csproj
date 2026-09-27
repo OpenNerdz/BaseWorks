@@ -12,6 +12,7 @@
     <Compile Include="../src/StorageTransferPlan.cs" />
     <Compile Include="../src/WorkshopRules.cs" />
     <Compile Include="../src/WorkshopPlanner.cs" />
+    <Compile Include="../src/WorkshopReservations.cs" />
     <Compile Include="../src/WorkshopTransactions.cs" />
     <Compile Include="../src/WorkshopMachines.cs" />
     <Compile Include="../src/WorkshopForgePlan.cs" />

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Platform;
 using UnityEngine;
@@ -17,10 +18,40 @@ namespace NearbyCraft
         internal static readonly Dictionary<string, string> TargetStatus = new Dictionary<string, string>();
         internal static readonly Dictionary<Vector3i, string> StationStatus = new Dictionary<Vector3i, string>();
         internal static readonly HashSet<Vector3i> Removed = new HashSet<Vector3i>();
+        private static readonly Dictionary<Vector3i, TickProfile> TickProfiles = new Dictionary<Vector3i, TickProfile>();
+        private sealed class TickProfile
+        {
+            internal int Count;
+            internal long Scan, Devices, Service, Scheduler, Total, Maximum;
+        }
+        // These vanilla workstation tools deliberately produce a fixed tier-one
+        // result. Variable-quality equipment still belongs in the native player
+        // crafting UI so automation never guesses a quality.
+        private static readonly HashSet<string> FixedQualityOutputs = new HashSet<string>(StringComparer.Ordinal)
+        { "toolAnvil", "toolCookingGrill", "toolCookingPot" };
 
         internal static bool IsController(Block block) { return block != null && block.GetBlockName() == BlockName; }
         internal static bool IsManager(Block block) { return IsController(block) || StorageTerminalManager.IsTerminal(block); }
         internal static string TargetKey(Vector3i position, string item) { return position + "/" + item; }
+
+        internal static WorkshopControllerData FindOutputOwner(TileEntityWorkstation station)
+        {
+            if (!Accessible(station) || !station.IsPlayerPlaced || !WorkshopMachines.Supported(station)) return null;
+            var world = GameManager.Instance.World;
+            if (world == null) return null;
+            var pos = station.ToWorldPos();
+            int range = NearbyCraftMod.Config.TerminalRange;
+            foreach (var controller in WorkshopStore.Controllers.OrderByDescending(c => c.Enabled).ThenBy(c => c.X).ThenBy(c => c.Y).ThenBy(c => c.Z))
+            {
+                if (!controller.Linked || controller.ExcludedStations.Contains(pos.ToString())
+                    || (controller.Position.ToVector3() - pos.ToVector3()).sqrMagnitude > range * range) continue;
+                if (controller.Targets.Any(t => t.Once && t.TrackDelivery && t.CompletedUtcTicks == 0 && t.Returned < t.Queued
+                    && station.Output.Any(s => s != null && !s.IsEmpty() && s.itemValue.ItemClass.GetItemName() == t.Item))
+                    && IsManager(world.GetBlock(controller.Position).Block) && FindDevices(world, controller.Position).Contains(station))
+                    return controller;
+            }
+            return null;
+        }
 
         internal static bool Accessible(TileEntity entity)
         {
@@ -34,8 +65,53 @@ namespace NearbyCraft
         {
             if (recipe == null || recipe.IsScrap || recipe.isQuest || recipe.isChallenge) return false;
             var output = recipe.GetOutputItemClass();
-            if (output == null || output.HasQuality || !output.CanStack() || !output.CanPlaceInContainer()) return false;
+            if (output == null || !output.CanPlaceInContainer()) return false;
+            // Non-stackable blocks and machines are safe when storage has a free
+            // cell. Only variable-quality equipment remains outside automation.
+            if (output.HasQuality && !FixedQualityOutputs.Contains(recipe.GetName())) return false;
             return recipe.ingredients.All(i => i != null && !i.itemValue.HasQuality && i.count >= 0);
+        }
+
+        // Smelter recipes describe their inputs as internal forge units. Mapping
+        // those units back to a raw item can expose vanilla recovery recipes such
+        // as four glass units -> one crushed sand. Crushed sand itself supplies
+        // exactly those four glass units, so treating that recovery recipe as a
+        // production path only burns fuel and returns the item it consumed.
+        // Automation must never select a recipe whose direct or translated raw
+        // input is its own output; the full planner treats it as a dependency cycle.
+        internal static bool Productive(Recipe recipe)
+        {
+            if (!Supported(recipe)) return false;
+            foreach (var ingredient in recipe.ingredients)
+            {
+                if (ingredient == null || ingredient.count <= 0) continue;
+                int inputType = ingredient.itemValue.type;
+                if (recipe.materialBasedRecipe)
+                {
+                    string rawName = WorkshopMachines.RawMaterial(ingredient.itemValue.ItemClass.GetItemName());
+                    var raw = string.IsNullOrEmpty(rawName) ? null : ItemClass.GetItem(rawName, false);
+                    if (raw != null && !raw.IsEmpty()) inputType = raw.type;
+                }
+                if (inputType == recipe.itemValueType) return false;
+            }
+            return true;
+        }
+
+        internal static string RecipeKey(Recipe recipe)
+        {
+            return recipe.GetName() + "/" + recipe.craftingArea + "/" + recipe.count + "/" + recipe.craftingToolType + "/"
+                + string.Join(";", recipe.ingredients.Select(i => i.itemValue.ItemClass.GetItemName() + ":" + i.count));
+        }
+
+        internal static bool RecipeUsable(Recipe recipe, TileEntityWorkstation station, EntityPlayerLocal player, out string reason)
+        {
+            reason = "";
+            if (!Productive(recipe)) { reason = "Recipe consumes its own output"; return false; }
+            if (!recipe.IsUnlocked(player)) { reason = "Unlock this recipe first"; return false; }
+            if (recipe.craftingToolType != 0 && !station.Tools.Any(t => t != null && !t.IsEmpty() && t.itemValue.type == recipe.craftingToolType))
+            { reason = "Install " + Localization.Get(ItemClass.GetForId(recipe.craftingToolType).GetItemName()); return false; }
+            if (station.IsBesideWater) { reason = "Move the machine away from water"; return false; }
+            return true;
         }
 
         internal static void Update(ref ModEvents.SGameUpdateData data)
@@ -51,6 +127,7 @@ namespace NearbyCraft
                 TargetStatus.Clear();
                 StationStatus.Clear();
                 Removed.Clear();
+                TickProfiles.Clear();
             }
             if (world != null && NearbyCraftMod.CanUseLocalStorage && WorkshopStore.Writable
                 && Time.realtimeSinceStartup >= nextRemovalAttempt)
@@ -75,6 +152,9 @@ namespace NearbyCraft
             var consoles = new HashSet<Vector3i>();
             var chests = new HashSet<Vector3i>();
             var claimedStations = new HashSet<Vector3i>();
+            // Keep diagnostics bounded to this scan instead of retaining every
+            // machine position and removed job visited during a long session.
+            Status.Clear(); TargetStatus.Clear(); StationStatus.Clear();
             foreach (var controller in WorkshopStore.Controllers.OrderBy(c => c.X).ThenBy(c => c.Y).ThenBy(c => c.Z).ToArray())
             {
                 if (!WorkshopStore.Writable) break;
@@ -105,8 +185,11 @@ namespace NearbyCraft
             { Status[pos] = "LINK A STORAGE CONSOLE WITHIN RANGE"; return; }
             if (!consoles.Add(controller.Console)) { Status[pos] = "Another controller already manages this console"; return; }
 
+            bool profiling = NearbyCraftMod.Config.ProfileWorkshopTicks;
+            long started = profiling ? Stopwatch.GetTimestamp() : 0;
             var network = new StorageNetworkSession(world, player, controller.Console, NearbyCraftMod.Config, pos, true);
             network.Rescan(false);
+            long scanned = profiling ? Stopwatch.GetTimestamp() : 0;
             if (network.AutomationBusy || world.GetTileEntity(controller.Console).IsUserAccessing())
             { Status[pos] = "Waiting: storage is in use"; return; }
             if (network.ConnectedStorageCount == 0) { Status[pos] = "No accessible chests connected"; return; }
@@ -117,6 +200,7 @@ namespace NearbyCraft
                 .Where(s => !controller.ExcludedStations.Contains(s.ToWorldPos().ToString())).ToList();
             var managed = devices.Where(s => claimedStations.Add(s.ToWorldPos())).ToList();
             var allStations = managed.OfType<TileEntityWorkstation>().ToList();
+            long discovered = profiling ? Stopwatch.GetTimestamp() : 0;
             var stations = allStations;
             Status[pos] = managed.Count + " machines / " + network.ConnectedStorageCount + " chests / T" + network.Tier + " console";
             if (managed.Count == 0) { Status[pos] = "No enabled machines within range"; return; }
@@ -143,7 +227,30 @@ namespace NearbyCraft
                 StationStatus[collector.ToWorldPos()] = message;
             }
 
+            long serviced = profiling ? Stopwatch.GetTimestamp() : 0;
             new WorkshopScheduler(network, player, xui, controller, stations).Run();
+            if (profiling) RecordTickProfile(pos, started, scanned, discovered, serviced, Stopwatch.GetTimestamp());
+        }
+
+        private static void RecordTickProfile(Vector3i pos, long started, long scanned, long discovered,
+            long serviced, long finished)
+        {
+            TickProfile profile;
+            if (!TickProfiles.TryGetValue(pos, out profile)) TickProfiles[pos] = profile = new TickProfile();
+            profile.Count++;
+            profile.Scan += scanned - started;
+            profile.Devices += discovered - scanned;
+            profile.Service += serviced - discovered;
+            profile.Scheduler += finished - serviced;
+            profile.Total += finished - started;
+            profile.Maximum = Math.Max(profile.Maximum, finished - started);
+            if (profile.Count < 10) return;
+            double milliseconds = 1000d / Stopwatch.Frequency;
+            Log.Out("[NearbyCraft] Workshop tick {0}: {1} runs, mean {2:F2} ms, max {3:F2} ms; mean storage {4:F2}, devices {5:F2}, service {6:F2}, scheduler {7:F2} ms.",
+                pos, profile.Count, profile.Total * milliseconds / profile.Count, profile.Maximum * milliseconds,
+                profile.Scan * milliseconds / profile.Count, profile.Devices * milliseconds / profile.Count,
+                profile.Service * milliseconds / profile.Count, profile.Scheduler * milliseconds / profile.Count);
+            TickProfiles.Remove(pos);
         }
 
         internal static List<TileEntityWorkstation> FindStations(World world, Vector3i position)
@@ -184,7 +291,7 @@ namespace NearbyCraft
             try
             {
                 EffectManager.slotsCached = WorkshopMachines.Uses(station, TileEntityWorkstation.Module.Tools)
-                    ? station.Tools : new ItemStack[0];
+                    ? station.Tools : Array.Empty<ItemStack>();
                 EffectManager.slotsQueriedFrame = Time.frameCount;
                 EffectManager.slotsQueriedForEntity = xui.playerUI.entityPlayer.entityId;
                 return PrepareRecipeCore(recipe, xui);

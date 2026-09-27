@@ -34,19 +34,66 @@ namespace NearbyCraft
 
         internal int Withdraw(ItemStack template, int requested)
         {
+            return Withdraw(template, requested, Matches);
+        }
+
+        internal long Count(ItemStack template)
+        {
+            if (Empty(template) || committed) return 0;
+            long count = 0;
+            foreach (Inventory inventory in inventories)
+                for (int i = 0; i < inventory.After.Length; i++)
+                    if (!inventory.Locked[i] && Matches(inventory.After[i], template))
+                        count += inventory.After[i].count;
+            return count;
+        }
+
+        internal int WithdrawPreserving(ItemStack template, int requested, long keep)
+        {
+            long available = Math.Max(0, Count(template) - Math.Max(0, keep));
+            return Withdraw(template, (int)Math.Min(Math.Max(0, requested), Math.Min(int.MaxValue, available)), Matches);
+        }
+
+        // Vanilla Bag.GetItemCount/DecItem crafting payments intentionally match
+        // by item type and skip installed mods. Crafting must use that rule even
+        // though terminal/loadout transfers keep their stricter value matching.
+        internal int WithdrawCraft(ItemStack template, int requested)
+        {
+            return Withdraw(template, requested, CraftMatches);
+        }
+
+        internal int WithdrawCraftPreserving(ItemStack template, int requested, long keep)
+        {
+            long count = 0;
+            foreach (Inventory inventory in inventories)
+                for (int i = 0; i < inventory.After.Length; i++)
+                    if (!inventory.Locked[i] && CraftMatches(inventory.After[i], template)) count += inventory.After[i].count;
+            long available = Math.Max(0, count - Math.Max(0, keep));
+            return Withdraw(template, (int)Math.Min(Math.Max(0, requested), Math.Min(int.MaxValue, available)), CraftMatches);
+        }
+
+        private int Withdraw(ItemStack template, int requested, Func<ItemStack, ItemStack, bool> matches)
+        {
             if (Empty(template) || requested <= 0 || committed) return 0;
             int remaining = requested;
             foreach (Inventory inventory in inventories)
                 for (int i = 0; i < inventory.After.Length && remaining > 0; i++)
                 {
                     ItemStack stack = inventory.After[i];
-                    if (inventory.Locked[i] || !Matches(stack, template)) continue;
+                    if (inventory.Locked[i] || !matches(stack, template)) continue;
                     int amount = Math.Min(stack.count, remaining);
                     stack.count -= amount;
                     remaining -= amount;
                     if (stack.count == 0) inventory.After[i] = ItemStack.Empty.Clone();
                 }
             return requested - remaining;
+        }
+
+        internal static bool CraftMatches(ItemStack available, ItemStack required)
+        {
+            return !Empty(available) && !Empty(required)
+                && available.itemValue.type == required.itemValue.type
+                && (!available.itemValue.HasModSlots || !available.itemValue.HasMods());
         }
 
         internal int Deposit(ItemStack stack)

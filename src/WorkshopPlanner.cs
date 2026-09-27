@@ -22,13 +22,20 @@ namespace NearbyCraft
 
         internal static bool Consume(StorageTransferPlan plan, IList<ItemStack> ingredients, int batches, out ItemStack missing)
         {
+            return Consume(plan, ingredients, batches, null, null, out missing);
+        }
+
+        internal static bool Consume(StorageTransferPlan plan, IList<ItemStack> ingredients, int batches,
+            WorkshopReservationBank bank, WorkshopReservationClaim claim, out ItemStack missing)
+        {
             missing = null;
-            if (batches <= 0 || batches > WorkshopRules.BatchLimit) return false;
+            if (batches <= 0 || batches > WorkshopRules.MaximumNativeBatch) return false;
             foreach (var ingredient in ingredients)
             {
                 int count = checked(ingredient.count * batches);
                 if (count <= 0) continue;
-                if (plan.Withdraw(ingredient, count) == count) continue;
+                long keep = bank == null ? 0 : bank.Keep(claim, ingredient.itemValue.type, count);
+                if (plan.WithdrawCraftPreserving(ingredient, count, keep) == count) continue;
                 missing = ingredient;
                 return false;
             }
@@ -46,7 +53,7 @@ namespace NearbyCraft
             IList<ItemStack> ingredients, int batches, out ItemStack missing)
         {
             missing = null;
-            if (batches <= 0 || batches > WorkshopRules.BatchLimit) return false;
+            if (batches <= 0 || batches > WorkshopRules.MaximumNativeBatch) return false;
             foreach (var ingredient in ingredients)
             {
                 int remaining = checked(ingredient.count * batches);
@@ -67,6 +74,12 @@ namespace NearbyCraft
         internal static int Supply(StorageTransferPlan network, ItemStack[] destination,
             int slotCount, ItemStack template, int requested)
         {
+            return Supply(network, destination, slotCount, template, requested, 0);
+        }
+
+        internal static int Supply(StorageTransferPlan network, ItemStack[] destination,
+            int slotCount, ItemStack template, int requested, long keep)
+        {
             int moved = 0;
             int maximum = System.Math.Max(1, template.itemValue.ItemClassOrMissing.MaxCount);
             for (int pass = 0; pass < 2 && moved < requested; pass++)
@@ -76,7 +89,7 @@ namespace NearbyCraft
                 bool empty = stack == null || stack.IsEmpty();
                 if (pass == 0 ? empty || !StorageTransferPlan.Matches(stack, template) : !empty) continue;
                 int take = System.Math.Min(requested - moved, System.Math.Max(0, maximum - (empty ? 0 : stack.count)));
-                take = network.Withdraw(template, take);
+                take = network.WithdrawPreserving(template, take, keep);
                 if (take <= 0) continue;
                 if (empty) destination[i] = new ItemStack(template.itemValue.Clone(), take);
                 else stack.count += take;

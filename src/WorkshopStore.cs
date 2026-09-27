@@ -15,6 +15,7 @@ namespace NearbyCraft
         public int Remaining;
         public bool TrackDelivery;
         public int Queued, Returned;
+        public int CollectedManually;
         public long CompletedUtcTicks;
     }
 
@@ -24,6 +25,7 @@ namespace NearbyCraft
         public int Requested, Produced;
         public long UtcTicks;
         public bool VerifiedDelivery;
+        public int CollectedManually;
     }
 
     internal sealed class WorkshopControllerData
@@ -97,7 +99,7 @@ namespace NearbyCraft
                         foreach (var job in controller.Smelting)
                             if (job == null || string.IsNullOrEmpty(job.Item) || string.IsNullOrEmpty(job.Owner)
                                 || string.IsNullOrEmpty(job.RecipeKey) || job.RecipeKey.Length > 4096
-                                || job.Batches < 1 || job.Batches > WorkshopRules.BatchLimit || job.Count < 1
+                                || job.Batches < 1 || job.Batches > WorkshopRules.MaximumNativeBatch || job.Count < 1
                                 || job.Count > WorkshopRules.MaximumTarget || !assigned.Add(job.X + ":" + job.Y + ":" + job.Z))
                                 throw new InvalidDataException("Invalid smelting assignment");
                         foreach (var target in controller.Targets)
@@ -107,6 +109,7 @@ namespace NearbyCraft
                             target.Target = WorkshopRules.ClampTarget(target.Target);
                             target.Remaining = Math.Max(0, Math.Min(WorkshopRules.MaximumTarget, target.Remaining));
                             if (target.Queued < 0 || target.Returned < 0 || target.Returned > target.Queued
+                                || target.CollectedManually < 0 || target.CollectedManually > target.Returned
                                 || target.CompletedUtcTicks < 0 || target.CompletedUtcTicks > DateTime.MaxValue.Ticks)
                                 throw new InvalidDataException("Invalid delivery progress");
                         }
@@ -139,12 +142,13 @@ namespace NearbyCraft
             return Controllers.Find(c => c.Position == position);
         }
 
-        internal static bool CreditDelivery(WorkshopControllerData controller, string item, int count)
+        internal static bool CreditDelivery(WorkshopControllerData controller, string item, int count, bool manual = false)
         {
             var target = controller.Targets.Find(t => t.Item == item && t.Once && t.TrackDelivery && t.CompletedUtcTicks == 0);
             if (target == null || count <= 0) return false;
             int credited = Math.Min(count, target.Queued - target.Returned);
             target.Returned += credited;
+            if (manual) target.CollectedManually += credited;
             return credited > 0;
         }
 
@@ -153,7 +157,8 @@ namespace NearbyCraft
             if (target.CompletedUtcTicks != 0) return;
             target.CompletedUtcTicks = DateTime.UtcNow.Ticks;
             controller.Completed.Insert(0, new WorkshopCompletion { Item = target.Item, Requested = target.Target,
-                Produced = target.Queued, UtcTicks = target.CompletedUtcTicks, VerifiedDelivery = verified });
+                Produced = target.Queued, UtcTicks = target.CompletedUtcTicks, VerifiedDelivery = verified,
+                CollectedManually = target.CollectedManually });
             if (controller.Completed.Count > WorkshopRules.MaximumHistory)
                 controller.Completed.RemoveRange(WorkshopRules.MaximumHistory, controller.Completed.Count - WorkshopRules.MaximumHistory);
         }

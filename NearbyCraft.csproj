@@ -4,13 +4,14 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>NearbyCraft</AssemblyName>
     <RootNamespace>NearbyCraft</RootNamespace>
-    <Version>1.8.0</Version>
-    <AssemblyVersion>1.8.0.0</AssemblyVersion>
-    <FileVersion>1.8.0.0</FileVersion>
+    <Version>2.0.6</Version>
+    <AssemblyVersion>2.0.6.0</AssemblyVersion>
+    <FileVersion>2.0.6.0</FileVersion>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <DebugType>none</DebugType>
     <DefineConstants Condition="'$(GameplayQA)' == 'true'">$(DefineConstants);NEARBYCRAFT_GAMEPLAY_QA</DefineConstants>
+    <DefineConstants Condition="'$(AssetQA)' == 'true'">$(DefineConstants);NEARBYCRAFT_ASSET_QA</DefineConstants>
     <GamePath Condition="'$(GamePath)' == ''">/home/brad/.local/share/Steam/steamapps/common/7 Days To Die</GamePath>
     <ManagedPath>$(GamePath)/7DaysToDie_Data/Managed</ManagedPath>
     <HarmonyPath>$(GamePath)/Mods/0_TFP_Harmony</HarmonyPath>
@@ -18,7 +19,9 @@
 
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />
+    <Compile Remove="design/**/*.cs" />
     <Compile Include="tests/GameplayQA.cs" Condition="'$(GameplayQA)' == 'true'" />
+    <Compile Include="tests/AssetQA.cs" Condition="'$(AssetQA)' == 'true'" />
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
     <PackageFile Include="package/**/*" />
   </ItemGroup>
@@ -32,6 +35,19 @@
       <HintPath>$(ManagedPath)/UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(ManagedPath)/UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(ManagedPath)/UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Unity.Addressables">
+      <HintPath>$(ManagedPath)/Unity.Addressables.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="System.IO.Compression" />
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>$(ManagedPath)/UnityEngine.InputLegacyModule.dll</HintPath>
       <Private>false</Private>
@@ -63,7 +79,7 @@
     <Error Condition="!Exists('$(HarmonyPath)/0Harmony.dll')" Text="The game's 0_TFP_Harmony mod is missing at '$(HarmonyPath)'. Verify the game installation." />
   </Target>
 
-  <Target Name="PackageRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' and '$(GameplayQA)' != 'true'">
+  <Target Name="PackageRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' and '$(GameplayQA)' != 'true' and '$(AssetQA)' != 'true'">
     <PropertyGroup>
       <StageRoot>$(MSBuildProjectDirectory)/dist/stage</StageRoot>
       <StageMod>$(StageRoot)/NearbyCraft</StageMod>

@@ -20,17 +20,22 @@ public sealed partial class ItemValue
 {
     public int type;
     public int Metadata;
+    public int Quality;
     public ushort Seed;
     public byte Flags;
     public int TextureFullArray;
     public bool HasQuality;
+    public bool HasModSlots;
+    public bool InstalledMods;
     public ItemClass ItemClassOrMissing = new ItemClass();
-    public ItemValue Clone() => new ItemValue { type = type, Metadata = Metadata, Seed = Seed,
+    public ItemValue Clone() => new ItemValue { type = type, Metadata = Metadata, Quality = Quality, Seed = Seed,
         Flags = Flags, TextureFullArray = TextureFullArray, HasQuality = HasQuality,
+        HasModSlots = HasModSlots, InstalledMods = InstalledMods,
         ItemClassOrMissing = ItemClassOrMissing };
+    public bool HasMods() => InstalledMods;
     public override bool Equals(object obj) => obj is ItemValue other && type == other.type
-        && Metadata == other.Metadata && Seed == other.Seed && HasQuality == other.HasQuality;
-    public override int GetHashCode() => HashCode.Combine(type, Metadata);
+        && Metadata == other.Metadata && Quality == other.Quality && Seed == other.Seed && HasQuality == other.HasQuality;
+    public override int GetHashCode() => HashCode.Combine(type, Metadata, Quality);
 }
 
 public sealed partial class ItemStack

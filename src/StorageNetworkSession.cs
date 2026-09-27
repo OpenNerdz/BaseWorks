@@ -15,6 +15,15 @@ namespace NearbyCraft
             internal float DistanceSquared;
         }
 
+        private sealed class CatalogSourceSnapshot
+        {
+            internal TileEntity Owner;
+            internal ITileEntityLootable Storage;
+            internal Vector3i Position;
+            internal ItemStack[] Items;
+            internal bool[] Locked;
+        }
+
         private sealed class SourceDistanceComparer : IComparer<StorageSource>
         {
             internal static readonly SourceDistanceComparer Instance = new SourceDistanceComparer();
@@ -43,6 +52,9 @@ namespace NearbyCraft
         private readonly bool automation;
         internal bool AutomationBusy { get; private set; }
         private readonly List<StorageSource> sources = new List<StorageSource>(32);
+        private readonly List<CatalogSourceSnapshot> catalogSnapshot = new List<CatalogSourceSnapshot>(32);
+        private bool hasCatalogSnapshot;
+        private int snapshotOverflowCount;
         private TerminalCatalog catalog; // Created only for a UI/counting session, never ore-only export.
         private readonly List<TerminalCatalog.Entry> filteredItems = new List<TerminalCatalog.Entry>(128);
         internal int Tier { get; private set; }
@@ -76,6 +88,25 @@ namespace NearbyCraft
         internal int LastVisibleIndex { get { return Math.Min(filteredItems.Count, FirstVisibleIndex + VisibleSlotCount); } }
         internal StorageTerminalSort Sort { get { return sort; } }
 
+        internal Dictionary<int, long> SnapshotProductCounts(bool craftingOnly = false)
+        {
+            var result = new Dictionary<int, long>();
+            foreach (StorageSource source in sources)
+            {
+                if (!IsSourceValid(source)) continue;
+                for (int i = 0; i < source.Storage.items.Length; i++)
+                {
+                    ItemStack stack = source.Storage.items[i];
+                    if (IsSlotLocked(source, i) || stack == null || stack.IsEmpty() || stack.count <= 0) continue;
+                    if (craftingOnly && stack.itemValue.HasModSlots && stack.itemValue.HasMods()) continue;
+                    long current;
+                    result.TryGetValue(stack.itemValue.type, out current);
+                    result[stack.itemValue.type] = checked(current + stack.count);
+                }
+            }
+            return result;
+        }
+
         internal StorageNetworkSession(World world, EntityPlayerLocal player, Vector3i terminalPosition, NearbyCraftConfig config,
             Vector3i? interactionPosition = null, bool automation = false)
         {
@@ -95,16 +126,19 @@ namespace NearbyCraft
             }
         }
 
-        internal void Rescan(bool includeItemCatalog = true)
+        // Returns whether the UI catalog changed. Automation callers only need
+        // the source list and can continue to omit catalog construction.
+        internal bool Rescan(bool includeItemCatalog = true)
         {
             sources.Clear();
             OverflowCount = 0;
             AutomationBusy = false;
             if (!IsAvailable)
             {
-                if (includeItemCatalog) RebuildItems();
+                bool changed = includeItemCatalog && CatalogChanged();
+                if (changed) RebuildItems();
                 else ConnectedStorageCount = 0;
-                return;
+                return changed;
             }
 
             try
@@ -183,8 +217,14 @@ namespace NearbyCraft
                 Log.Warning("[NearbyCraft] Storage terminal scan failed safely: {0}", exception.Message);
             }
 
-            if (includeItemCatalog) RebuildItems();
-            else ConnectedStorageCount = sources.Count;
+            if (!includeItemCatalog)
+            {
+                ConnectedStorageCount = sources.Count;
+                return true;
+            }
+            if (!CatalogChanged()) return false;
+            RebuildItems();
+            return true;
         }
 
         internal void RebuildItems()
@@ -228,6 +268,51 @@ namespace NearbyCraft
             }
 
             RebuildFilter();
+            CaptureCatalogSnapshot();
+        }
+
+        private bool CatalogChanged()
+        {
+            if (!hasCatalogSnapshot || snapshotOverflowCount != OverflowCount
+                || catalogSnapshot.Count != sources.Count) return true;
+            for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
+            {
+                StorageSource source = sources[sourceIndex];
+                CatalogSourceSnapshot previous = catalogSnapshot[sourceIndex];
+                if (!ReferenceEquals(source.Owner, previous.Owner)
+                    || !ReferenceEquals(source.Storage, previous.Storage)
+                    || source.Position != previous.Position || !IsSourceValid(source)) return true;
+                ItemStack[] items = source.Storage.items;
+                if (items == null || items.Length != previous.Items.Length) return true;
+                for (int slotIndex = 0; slotIndex < items.Length; slotIndex++)
+                    if (IsSlotLocked(source, slotIndex) != previous.Locked[slotIndex]
+                        || !StorageTransferPlan.ExactEquals(items[slotIndex], previous.Items[slotIndex]))
+                        return true;
+            }
+            return false;
+        }
+
+        private void CaptureCatalogSnapshot()
+        {
+            catalogSnapshot.Clear();
+            for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
+            {
+                StorageSource source = sources[sourceIndex];
+                ItemStack[] items = source.Storage.items;
+                var locked = new bool[items.Length];
+                for (int slotIndex = 0; slotIndex < items.Length; slotIndex++)
+                    locked[slotIndex] = IsSlotLocked(source, slotIndex);
+                catalogSnapshot.Add(new CatalogSourceSnapshot
+                {
+                    Owner = source.Owner,
+                    Storage = source.Storage,
+                    Position = source.Position,
+                    Items = ItemStack.Clone(items),
+                    Locked = locked
+                });
+            }
+            snapshotOverflowCount = OverflowCount;
+            hasCatalogSnapshot = true;
         }
 
         internal ItemStack[] GetVisibleStacks(out long[] totals)
