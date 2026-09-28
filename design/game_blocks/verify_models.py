@@ -8,7 +8,7 @@ from mathutils import Vector
 ROOT=Path(__file__).resolve().parent
 manifest=json.loads((ROOT/'exports'/'manifest.json').read_text())
 results=[]
-bpy.ops.wm.open_mainfile(filepath=str(ROOT/'NearbyCraft_Blocks.blend'))
+bpy.ops.wm.open_mainfile(filepath=str(ROOT/'BaseWorks_Blocks.blend'))
 for name in ('Workshop identity','Storage identifier','Cabinet title'):
     obj=bpy.data.objects[name]
     # Check the texel density of the front face, not just the UV rectangle.

@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 DEST = ROOT.parents[1] / "package" / "Assets" / "NearbyCraftBlocks"
 ICONS = ROOT.parents[1] / "package" / "UIAtlases" / "ItemIconAtlas"
 MANIFEST = json.loads((ROOT / "exports" / "manifest.json").read_text())
-bpy.ops.wm.open_mainfile(filepath=str(ROOT / "NearbyCraft_Blocks.blend"))
+bpy.ops.wm.open_mainfile(filepath=str(ROOT / "BaseWorks_Blocks.blend"))
 DEST.mkdir(parents=True, exist_ok=True)
 ICONS.mkdir(parents=True, exist_ok=True)
 
@@ -70,4 +70,4 @@ for entry in MANIFEST["models"]:
                  ICONS / f"{entry['name']}_icon.png")
     print(f"RUNTIME_MESH {entry['name']} {entry['triangles']} {path.stat().st_size} bytes", flush=True)
 
-print("NEARBYCRAFT_RUNTIME_MESHES_READY: run prepare_runtime_textures.py for optimized texture atlases", flush=True)
+print("BASEWORKS_RUNTIME_MESHES_READY: run prepare_runtime_textures.py for optimized texture atlases", flush=True)

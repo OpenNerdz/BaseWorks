@@ -5,7 +5,7 @@ set -euo pipefail
 repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 game_dir='/home/brad/.local/share/Steam/steamapps/common/7 Days To Die'
 installed="$game_dir/Mods/NearbyCraft"
-release="$repo_dir/dist/NearbyCraft-2.0.6-V3.2.zip"
+release="$repo_dir/dist/BaseWorks-2.0.7-V3.2.zip"
 log="$repo_dir/dist/asset-qa-native.log"
 test_dir="$(mktemp -d "$repo_dir/dist/asset-qa.XXXXXX")"
 

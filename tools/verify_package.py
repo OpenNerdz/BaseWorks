@@ -299,6 +299,16 @@ manifest = etree.parse(str(repo / 'package/ModInfo.xml'))
 project = etree.parse(str(repo / 'NearbyCraft.csproj'))
 check(manifest.xpath('/xml/Version/@value') == project.xpath('/Project/PropertyGroup/Version/text()'),
       'Release manifest matches project version')
+check(manifest.xpath('/xml/Name/@value') == ['NearbyCraft'],
+      'Rebrand keeps the existing internal mod identity')
+check(manifest.xpath('/xml/DisplayName/@value') == ['BaseWorks'],
+      'Public in-game name is BaseWorks')
+check(manifest.xpath('/xml/Website/@value') == ['https://github.com/OpenNerdz/BaseWorks'],
+      'Manifest points to the renamed repository')
+check(project.xpath('/Project/PropertyGroup/AssemblyName/text()') == ['NearbyCraft'],
+      'Rebrand keeps the existing DLL identity')
+check('dist/BaseWorks-$(Version)-V3.2.zip' in (repo / 'NearbyCraft.csproj').read_text(),
+      'Release archive uses the BaseWorks name')
 check('and \'$(GameplayQA)\' != \'true\'' in (repo / 'NearbyCraft.csproj').read_text(), 'Gameplay QA builds cannot package a release')
 check('and \'$(AssetQA)\' != \'true\'' in (repo / 'NearbyCraft.csproj').read_text(), 'Asset QA builds cannot package a release')
 rules_source = (repo / 'src/WorkshopRules.cs').read_text()

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <xml>
   <Name value="NearbyCraft" />
-  <DisplayName value="Nearby Craft" />
-  <Description value="One console for storage, production orders, automatic machine inputs, smelting, fueling and output collection." />
+  <DisplayName value="BaseWorks" />
+  <Description value="Connected storage, nearby crafting, production automation and loadout swaps for local worlds." />
   <Author value="bradhosk" />
-  <Version value="2.0.6" />
-  <Website value="https://github.com/OpenNerdz/NearbyCraft" />
+  <Version value="2.0.7" />
+  <Website value="https://github.com/OpenNerdz/BaseWorks" />
   <SkipWithAntiCheat value="true" />
 </xml>

@@ -1,12 +1,10 @@
+# Recreated by the art build; package/ contains the shipped versions.
 *.blend1
-unity/Library/
-unity/Logs/
-unity/Temp/
-unity/obj/
-unity/UserSettings/
-unity/Assets/Generated/
-unity/Assets/NearbyCraft/
-unity/*.csproj
-unity/*.sln
+exports/*.fbx
+exports/*_icon.png
+exports/validation.json
+textures/*.png
+previews/NC_*.png
+unity/
 built/
 staged/

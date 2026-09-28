@@ -1,4 +1,4 @@
-"""Build the original NearbyCraft salvage-industrial block family in Blender 4.5.
+"""Build the BaseWorks salvage-industrial block family in Blender 4.5.
 
 blender -b -t 8 --python design/game_blocks/build_models.py
 Outputs editable .blend, six FBXs with three LODs, manifests and actual mesh renders.
@@ -423,7 +423,7 @@ for area in bpy.context.screen.areas:
     if area.type=='VIEW_3D':
         area.spaces.active.region_3d.view_perspective='CAMERA'
         area.spaces.active.shading.type='MATERIAL'
-bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'NearbyCraft_Blocks.blend'))
+bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'BaseWorks_Blocks.blend'))
 bpy.ops.render.render(write_still=True)
 
 # Individual views and transparent inventory icon renders.
