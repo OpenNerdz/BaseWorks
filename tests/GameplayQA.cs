@@ -52,7 +52,7 @@ namespace NearbyCraft
         }
         private static ItemStack Stack(string name, int count) { return new ItemStack(ItemClass.GetItem(name), count); }
         private static int Count(TEFeatureStorage storage, string name)
-        { int id = ItemClass.GetItem(name).type; return storage.items.Where(s => s != null && !s.IsEmpty() && s.itemValue.type == id).Sum(s => s.count); }
+        { int id = ItemClass.GetItem(name).type; return storage.ItemGrid.items.Where(s => s != null && !s.IsEmpty() && s.itemValue.type == id).Sum(s => s.count); }
         private static bool SameStacks(ItemStack[] left, ItemStack[] right)
         {
             if (left == null || right == null || left.Length != right.Length) return false;
@@ -136,7 +136,7 @@ namespace NearbyCraft
             var boxPos = p + new Vector3i(2, 0, 0);
             world.SetBlockRPC(boxPos, Block.GetBlockValue("cntWoodWritableCrate"));
             var box = (TileEntityComposite)world.GetTileEntity(boxPos); box.SetOwner(PlatformManager.InternalLocalUserIdentifier);
-            var storage = box.GetFeature<TEFeatureStorage>(); storage.items = ItemStack.CreateArray(storage.items.Length);
+            var storage = box.GetFeature<TEFeatureStorage>(); storage.ItemGrid.ClearItems();
             string[] names = { "workbench", "cementMixer", "forge", "campfire", "chemistryStation", "cntDewCollector", "cntApiary", "cntChickenCoop" };
             var positions = new[] { new Vector3i(4,0,0), new Vector3i(8,0,0), new Vector3i(0,0,4), new Vector3i(4,0,4),
                 new Vector3i(8,0,4), new Vector3i(0,0,8), new Vector3i(4,0,8), new Vector3i(8,0,8) };
@@ -156,22 +156,22 @@ namespace NearbyCraft
             foreach (string name in names) Check(devices.Any(d => d.block.GetBlockName() == name), "discovers " + name);
             var workstations = devices.OfType<TileEntityWorkstation>().ToList();
             Check(workstations.Count(s => s.block.GetBlockName() == "forge") == 3, "three real forges available for work sharing");
-            storage.items[0] = Stack("resourceRockSmall", 1000);
-            storage.items[1] = Stack("resourceWood", 200);
-            storage.items[2] = Stack("drinkJarEmpty", 10);
+            storage.ItemGrid[0] = Stack("resourceRockSmall", 1000);
+            storage.ItemGrid[1] = Stack("resourceWood", 200);
+            storage.ItemGrid[2] = Stack("drinkJarEmpty", 10);
             var dew = devices.OfType<TileEntityCollector>().First(d => d.block.GetBlockName() == "cntDewCollector");
             dew.Items[0] = Stack("drinkJarRiverWater", 2);
             var ui = player.PlayerUI.xui;
             var inventory = ui.PlayerInventory;
             ItemStack[] originalBackpack = ItemStack.Clone(inventory.GetBackpackItemStacks());
-            ItemStack[] originalStorage = ItemStack.Clone(storage.items);
+            ItemStack[] originalStorage = ItemStack.Clone(storage.ItemGrid.items);
             try
             {
                 var testBackpack = ItemStack.CreateArray(originalBackpack.Length);
                 testBackpack[0] = Stack("resourceMechanicalParts", 5);
                 inventory.SetBackpackItemStacks(testBackpack);
-                storage.items = ItemStack.CreateArray(originalStorage.Length);
-                storage.items[0] = Stack("resourceMechanicalParts", 10);
+                storage.ItemGrid.ClearItems();
+                storage.ItemGrid[0] = Stack("resourceMechanicalParts", 10);
                 box.SetModified();
                 StorageIndex.ForceFreshForCraft();
                 var duplicated = new[] { Stack("resourceMechanicalParts", 8), Stack("resourceMechanicalParts", 8) };
@@ -187,7 +187,7 @@ namespace NearbyCraft
 
                 var mixerRecipe = XUiM_Recipes.GetRecipes().First(r => r.GetName() == "cementMixer");
                 inventory.SetBackpackItemStacks(ItemStack.CreateArray(originalBackpack.Length));
-                storage.items = ItemStack.CreateArray(originalStorage.Length);
+                storage.ItemGrid.ClearItems();
                 int mixerParts = 0;
                 for (int i = 0; i < mixerRecipe.ingredients.Count; i++)
                 {
@@ -195,7 +195,7 @@ namespace NearbyCraft
                     ingredient.itemValue.Meta = 70 + i;
                     ingredient.itemValue.Seed = (ushort)(900 + i);
                     ingredient.itemValue.Flags ^= ItemValue.cFlagsActivated;
-                    storage.items[i] = ingredient;
+                    storage.ItemGrid[i] = ingredient;
                     mixerParts += ingredient.count;
                 }
                 box.SetModified();
@@ -204,27 +204,27 @@ namespace NearbyCraft
                     "cement mixer Craft-button bridge accepts nearby ingredients using native item matching");
                 removed.Clear();
                 StorageIndex.RemoveItems(inventory, mixerRecipe.ingredients, 1, removed);
-                Check(storage.items.All(s => s == null || s.IsEmpty()) && removed.Sum(s => s.count) == mixerParts,
+                Check(storage.ItemGrid.items.All(s => s == null || s.IsEmpty()) && removed.Sum(s => s.count) == mixerParts,
                     "cement mixer consumes exactly its nearby recipe components");
 
                 testBackpack = ItemStack.CreateArray(originalBackpack.Length);
                 testBackpack[0] = Stack("resourceMechanicalParts", 5);
                 inventory.SetBackpackItemStacks(testBackpack);
-                storage.items = ItemStack.CreateArray(originalStorage.Length);
+                storage.ItemGrid.ClearItems();
                 box.SetModified();
                 var transactionSession = new StorageNetworkSession(world, player, p, NearbyCraftMod.Config);
                 Check(transactionSession.Rescan() && !transactionSession.Rescan(),
                     "unchanged terminal inventories skip repeat catalog rebuilds");
-                storage.items[0] = Stack("resourceMechanicalParts", 1);
+                storage.ItemGrid[0] = Stack("resourceMechanicalParts", 1);
                 Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 1,
                     "a new chest stack refreshes the terminal catalog");
-                storage.items[0].count++;
+                storage.ItemGrid.items[0].count++;
                 Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 2,
                     "in-place stack count changes refresh the terminal catalog");
-                storage.items[0].count--;
+                storage.ItemGrid.items[0].count--;
                 Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 1,
                     "restoring an in-place stack count refreshes the catalog again");
-                storage.items[0] = ItemStack.Empty.Clone();
+                storage.ItemGrid[0] = ItemStack.Empty.Clone();
                 Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 0,
                     "emptying a chest stack refreshes the catalog");
                 Check(transactionSession.DepositBackpack(inventory, false) == 5
@@ -232,15 +232,14 @@ namespace NearbyCraft
                     && Count(storage, "resourceMechanicalParts") == 5,
                     "bulk deposit commits the staged backpack and storage changes together");
 
-                storage.items = ItemStack.CreateArray(originalStorage.Length);
-                storage.items[0] = Stack("resourceMechanicalParts", 10);
+                storage.ItemGrid.ClearItems();
+                storage.ItemGrid[0] = Stack("resourceMechanicalParts", 10);
                 box.SetModified();
                 Check(transactionSession.Rescan() && transactionSession.TotalItemCount == 10,
                     "external chest replacement refreshes the terminal catalog");
                 Check(!transactionSession.Rescan(), "unchanged replacement is not redrawn repeatedly");
-                PackedBoolArray locks = storage.SlotLocks;
-                if (NearbyCraftMod.Config.RespectLockedSlots && storage.HasSlotLocksSupport
-                    && locks != null && locks.Length > 0)
+                PackedBoolArray locks = storage.ItemGrid.SlotLocks;
+                if (NearbyCraftMod.Config.RespectLockedSlots && locks != null && locks.Length > 0)
                 {
                     bool originalLock = locks[0];
                     try
@@ -258,7 +257,7 @@ namespace NearbyCraft
                 bool exchanged = transactionSession.TryExchangeLoadout(
                     new[] { ItemStack.Empty.Clone() }, new[] { Stack("resourceMechanicalParts", 1) },
                     () => true,
-                    () => { applied = true; storage.items[0].count--; },
+                    () => { applied = true; storage.ItemGrid.items[0].count--; },
                     () => rolledBack = true, out swap);
                 Check(!exchanged && applied && rolledBack, "loadout swap rolls the player side back when storage changes during apply");
                 Check(Count(storage, "resourceMechanicalParts") == 9,
@@ -270,7 +269,7 @@ namespace NearbyCraft
             finally
             {
                 inventory.SetBackpackItemStacks(originalBackpack);
-                storage.items = originalStorage;
+                storage.ItemGrid.SetItems(originalStorage);
                 box.SetModified();
                 StorageIndex.Invalidate();
             }
@@ -499,7 +498,7 @@ namespace NearbyCraft
                 && WorkshopStore.Get(p).Targets[0].Remaining == 0, "Repeat fills quantity without silently placing another order");
             player.PlayerUI.windowManager.Close(WorkshopManager.WindowGroupId);
             Check(Count(storage, "drinkJarRiverWater") >= 2 && Count(storage, "drinkJarEmpty") < 10, "collector exports water and takes jars");
-            var concrete = storage.items.First(s => !s.IsEmpty() && s.itemValue.type == ItemClass.GetItem("resourceConcreteMix").type);
+            var concrete = storage.ItemGrid.items.First(s => !s.IsEmpty() && s.itemValue.type == ItemClass.GetItem("resourceConcreteMix").type);
             concrete.count -= 3;
             yield return new WaitForSecondsRealtime(5);
             Check(Count(storage, "resourceConcreteMix") == 21 && !workstations.Any(s => s.hasRecipeInQueue()), "completed MAKE ONCE does not replenish withdrawn items");

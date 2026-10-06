@@ -10,6 +10,7 @@
     <Compile Include="MachineGameStubs.cs" />
     <Compile Include="GameStubs.cs" />
     <Compile Include="../src/StorageTransferPlan.cs" />
+    <Compile Include="../src/GameSlots.cs" />
     <Compile Include="../src/WorkshopRules.cs" />
     <Compile Include="../src/WorkshopPlanner.cs" />
     <Compile Include="../src/WorkshopReservations.cs" />

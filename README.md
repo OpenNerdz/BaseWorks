@@ -1,6 +1,6 @@
 # BaseWorks
 
-**Storage, production automation, and loadout management for 7 Days to Die V3.2 b10.** BaseWorks connects nearby chests to a Storage Console, lets you craft from accessible supplies, runs orders through native workstations, and swaps saved equipment profiles. It is for solo/local worlds with Easy Anti-Cheat disabled.
+**Storage, production automation, and loadout management for 7 Days to Die V3.3 b18.** BaseWorks connects nearby chests to a Storage Console, lets you craft from accessible supplies, runs orders through native workstations, and swaps saved equipment profiles. It is for solo/local worlds with Easy Anti-Cheat disabled.
 
 BaseWorks was previously called NearbyCraft. The installed folder, DLL, block IDs, and save files still use `NearbyCraft` so existing worlds and configuration remain compatible.
 
@@ -19,7 +19,7 @@ The Storage Console's **PRODUCTION** section manages orders and machines. Existi
 ## Install or update
 
 1. Close the game. Back up the world, generated world, and existing `Mods/NearbyCraft` folder together.
-2. Extract `BaseWorks-2.0.7-V3.2.zip` into `Mods`. The resulting manifest must be at `Mods/NearbyCraft/ModInfo.xml`.
+2. Extract `BaseWorks-2.0.8-V3.3.zip` into `Mods`. The resulting manifest must be at `Mods/NearbyCraft/ModInfo.xml`.
 3. Keep existing `config.json`, `loadouts.json`, `workshops.json`, and their `.bak` files when updating. Remove the obsolete `Localization.txt` from very old installations.
 4. Start the game with Easy Anti-Cheat disabled. Try upgrades, production, and loadout swaps in a disposable world before using valuable items.
 
@@ -62,7 +62,7 @@ Storage controls: left-drag takes up to one normal stack from a grouped entry; r
 - Storage transfers, loadout swaps, and automation are solo/local-world features. On remote servers or when another client joins a hosted game, nearby crafting falls back to vanilla and console transfers are disabled.
 - Only loaded chunks are scanned. Machines must be near their manager; connected chests use the console's access rules, range, slot locks, and tier cap.
 - Another mod that patches the same crafting or storage behavior, such as Beyond Storage, ProxiCraft, or Craft From Containers, may conflict.
-- BaseWorks checks expected V3.2 crafting patch sites on startup. A mismatch disables its nearby crafting patches for that session; inspect the game log after a game update.
+- BaseWorks checks expected V3.3 crafting patch sites on startup. A mismatch disables its nearby crafting patches for that session; inspect the game log after a game update.
 - Production order state is stored separately from native world state. Back up both together. DeepBore output linking is optional; miner fueling is not automated.
 
 ## Configuration
@@ -73,13 +73,13 @@ The optional Linux/Proton backup helper at `tools/backup_saves.py` is not instal
 
 ## Build and verify
 
-Building requires the installed V3.2 game assemblies and .NET SDK. The default game path is set in `NearbyCraft.csproj`; override it when needed:
+Building requires the installed V3.3 game assemblies and .NET SDK. The default game path is set in `NearbyCraft.csproj`; override it when needed:
 
 ```bash
 dotnet build NearbyCraft.csproj -c Release -p:GamePath="/path/to/7 Days To Die"
 bash tools/test_fast.sh --full
 ```
 
-The Release target creates `dist/BaseWorks-2.0.7-V3.2.zip`. The archive contains the stable `NearbyCraft/` mod folder. The test matrix covers planners, persistence, transactions, API signatures, XML/package rules, and backups. Stub and metadata tests do not replace a native gameplay run; see [TESTING.md](https://github.com/OpenNerdz/BaseWorks/blob/main/TESTING.md) for the current status.
+The Release target creates `dist/BaseWorks-2.0.8-V3.3.zip`. The archive contains the stable `NearbyCraft/` mod folder. The test matrix covers planners, persistence, transactions, API signatures, XML/package rules, and backups. Stub and metadata tests do not replace a native gameplay run; see [TESTING.md](https://github.com/OpenNerdz/BaseWorks/blob/main/TESTING.md) for the current status.
 
 Editable Blender art and rebuild instructions are in [design/game_blocks](https://github.com/OpenNerdz/BaseWorks/tree/main/design/game_blocks). Runtime meshes and textures are in `package/`. The repository keeps the authored model source and shipping assets; generated exports and old QA screenshots are left out of the working tree.

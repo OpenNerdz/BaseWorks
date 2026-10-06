@@ -89,8 +89,9 @@ namespace NearbyCraft
         {
             if (stack == null || stack.IsEmpty() || stack.count <= 0) return null;
             using (var stream = new MemoryStream())
-            using (var writer = new BinaryWriter(stream))
+            using (PooledBinaryWriter writer = MemoryPools.poolBinaryWriter.AllocSync(false))
             {
+                writer.SetBaseStream(stream);
                 stack.Write(writer);
                 writer.Flush();
                 return new SerializedLoadoutItem
@@ -109,8 +110,9 @@ namespace NearbyCraft
             {
                 byte[] bytes = Convert.FromBase64String(saved.Data);
                 using (var stream = new MemoryStream(bytes, false))
-                using (var reader = new BinaryReader(stream))
+                using (PooledBinaryReader reader = MemoryPools.poolBinaryReader.AllocSync(false))
                 {
+                    reader.SetBaseStream(stream);
                     ItemStack loaded = new ItemStack().Read(reader);
                     if (loaded == null || loaded.IsEmpty() || loaded.count <= 0
                         || !string.Equals(saved.Name, loaded.itemValue.ItemClassOrMissing.GetItemName(), StringComparison.Ordinal))

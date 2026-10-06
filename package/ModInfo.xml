@@ -4,7 +4,7 @@
   <DisplayName value="BaseWorks" />
   <Description value="Connected storage, nearby crafting, production automation and loadout swaps for local worlds." />
   <Author value="bradhosk" />
-  <Version value="2.0.7" />
+  <Version value="2.0.8" />
   <Website value="https://github.com/OpenNerdz/BaseWorks" />
   <SkipWithAntiCheat value="true" />
 </xml>

@@ -84,7 +84,6 @@ namespace NearbyCraft
         internal ItemStack[] Toolbelt;
         internal ItemStack[] Backpack;
         internal bool[] BackpackLocks;
-        internal global::Equipment PreparedEquipment;
 
         internal static PlayerLoadoutState Capture(EntityPlayerLocal player, XUiM_PlayerInventory inventory)
         {
@@ -94,8 +93,7 @@ namespace NearbyCraft
             {
                 Equipment = ItemStack.CreateArray(equipmentSlots),
                 Toolbelt = ItemStack.Clone(inventory.GetToolbeltItemStacks()),
-                Backpack = ItemStack.Clone(inventory.GetBackpackItemStacks()),
-                PreparedEquipment = player.equipment.Clone()
+                Backpack = ItemStack.Clone(inventory.GetBackpackItemStacks())
             };
             for (int i = 0; i < equipmentSlots; i++)
             {
@@ -124,7 +122,15 @@ namespace NearbyCraft
                 for (int i = 0; i < Math.Min(locks.Length, BackpackLocks.Length); i++) locks[i] = BackpackLocks[i];
             inventory.SetToolbeltItemStacks(ItemStack.Clone(Toolbelt));
             inventory.SetBackpackItemStacks(ItemStack.Clone(Backpack));
-            player.equipment.Apply(PreparedEquipment, true);
+            // 3.3 removed Equipment.Clone/Apply. Change only differing slots, then refresh like the equipment UI does.
+            for (int i = 0; i < Equipment.Length; i++)
+            {
+                ItemValue current = player.equipment.GetSlotItem(i);
+                ItemStack live = current == null || current.IsEmpty() ? ItemStack.Empty : new ItemStack(current.Clone(), 1);
+                if (StorageTransferPlan.ExactEquals(live, Equipment[i])) continue;
+                player.equipment.SetSlotItem(i, Equipment[i].IsEmpty() ? ItemValue.None : Equipment[i].itemValue.Clone());
+            }
+            inventory.xui.PlayerEquipment.RefreshEquipment();
         }
 
         private static bool Equal(ItemStack[] left, ItemStack[] right)
@@ -230,20 +236,6 @@ namespace NearbyCraft
                     error = "A saved supply item no longer fits its backpack slot.";
                     return false;
                 }
-
-            try
-            {
-                target.PreparedEquipment = player.equipment.Clone();
-                for (int i = 0; i < target.Equipment.Length; i++)
-                    target.PreparedEquipment.SetSlotItemRaw(i, target.Equipment[i].IsEmpty()
-                        ? ItemStack.Empty.itemValue.Clone() : target.Equipment[i].itemValue.Clone());
-            }
-            catch (Exception exception)
-            {
-                Log.Warning("[NearbyCraft] Could not stage equipment safely: {0}", exception.Message);
-                error = "The equipment change could not be prepared safely.";
-                return false;
-            }
 
             currentManaged = new List<ItemStack>();
             targetManaged = new List<ItemStack>();

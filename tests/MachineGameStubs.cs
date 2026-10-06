@@ -122,7 +122,8 @@ namespace NearbyCraft
     {
         private World world;
         private ItemStack[] chests;
-        private class TestStorage { internal ItemStack[] items; }
+        private class TestStorage { internal TestGrid ItemGrid; }
+        private class TestGrid { internal ItemStack[] items; }
         private class TestSource { internal Vector3i Position; internal TestStorage Storage; }
         private readonly List<TestSource> sources = new();
         private bool IsSourceValid(TestSource source) => IsAvailable;
@@ -133,7 +134,7 @@ namespace NearbyCraft
         internal Action BeforeCommit = null;
         internal StorageNetworkSession(World world, ItemStack[] items) {
             this.world = world; chests = items; Locks = new bool[items.Length];
-            sources.Add(new TestSource { Position = new Vector3i(), Storage = new TestStorage { items = items } });
+            sources.Add(new TestSource { Position = new Vector3i(), Storage = new TestStorage { ItemGrid = new TestGrid { items = items } } });
         }
         private class Transaction { internal StorageTransferPlan Plan = new(); }
         private Transaction BeginTransaction()

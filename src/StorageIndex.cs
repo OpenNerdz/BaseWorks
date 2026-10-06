@@ -407,14 +407,14 @@ namespace NearbyCraft
                     return collector == null ? null : collector.Items;
                 case SourceKind.Vehicle:
                     var vehicle = source.Owner as EntityVehicle;
-                    return vehicle == null || vehicle.bag == null ? null : vehicle.bag.GetSlots();
+                    return vehicle == null || vehicle.bag == null ? null : vehicle.bag.ItemGrid.items;
                 case SourceKind.Drone:
                     var drone = source.Owner as EntityDrone;
-                    return drone == null || drone.bag == null ? null : drone.bag.GetSlots();
+                    return drone == null || drone.bag == null ? null : drone.bag.ItemGrid.items;
                 default:
                     var tile = source.Owner as TileEntity;
-                    ITileEntityLootable storage;
-                    return tile != null && tile.TryGetSelfOrFeature<ITileEntityLootable>(out storage) ? storage.items : null;
+                    TEFeatureStorage storage;
+                    return tile != null && tile.TryGetSelfOrFeature<TEFeatureStorage>(out storage) ? storage.ItemGrid.items : null;
             }
         }
 
@@ -565,11 +565,11 @@ namespace NearbyCraft
                 return;
             }
 
-            ITileEntityLootable lootable;
-            if (tileEntity.TryGetSelfOrFeature<ITileEntityLootable>(out lootable) && lootable != null && lootable.bPlayerStorage)
+            TEFeatureStorage lootable;
+            if (tileEntity.TryGetSelfOrFeature<TEFeatureStorage>(out lootable) && lootable != null && lootable.ItemGrid.PlayerOwned)
             {
-                PackedBoolArray lockedSlots = config.RespectLockedSlots && lootable.HasSlotLocksSupport ? lootable.SlotLocks : null;
-                AddSource(SourceKind.PlayerStorage, tileEntity, lootable.items, lockedSlots, distanceSquared);
+                PackedBoolArray lockedSlots = config.RespectLockedSlots ? lootable.ItemGrid.SlotLocks : null;
+                AddSource(SourceKind.PlayerStorage, tileEntity, lootable.ItemGrid.items, lockedSlots, distanceSquared);
             }
         }
 
@@ -593,7 +593,7 @@ namespace NearbyCraft
                     float distanceSquared = (vehicle.position - playerPosition).sqrMagnitude;
                     if (distanceSquared <= maxDistanceSquared)
                     {
-                        AddSource(SourceKind.Vehicle, vehicle, vehicle.bag.GetSlots(),
+                        AddSource(SourceKind.Vehicle, vehicle, vehicle.bag.ItemGrid.items,
                             config.RespectLockedSlots ? vehicle.bag.LockedSlots : null, distanceSquared);
                     }
                 }
@@ -613,7 +613,7 @@ namespace NearbyCraft
                     float distanceSquared = (drone.position - playerPosition).sqrMagnitude;
                     if (distanceSquared <= maxDistanceSquared)
                     {
-                        AddSource(SourceKind.Drone, drone, drone.bag.GetSlots(),
+                        AddSource(SourceKind.Drone, drone, drone.bag.ItemGrid.items,
                             config.RespectLockedSlots ? drone.bag.LockedSlots : null, distanceSquared);
                     }
                 }
@@ -714,12 +714,11 @@ namespace NearbyCraft
                 case SourceKind.Collector:
                     ((TileEntityCollector)source.Owner).SetModified();
                     break;
+                // Bag slots are written in place (see GameSlots); Bag.SetSlots would reshape the grid.
                 case SourceKind.Vehicle:
-                    ((EntityVehicle)source.Owner).bag.SetSlots(source.Slots);
                     ((EntityVehicle)source.Owner).SetBagModified();
                     break;
                 case SourceKind.Drone:
-                    ((EntityDrone)source.Owner).bag.SetSlots(source.Slots);
                     ((EntityDrone)source.Owner).SendSyncData(8);
                     break;
                 default:

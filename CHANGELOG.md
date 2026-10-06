@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.8
+
+- Updated for 7 Days to Die V3.3 b18. Version 2.0.7 does not load on V3.3: the game removed `ITileEntityLootable`.
+- Chests, vehicle bags and drone bags now use V3.3's `ItemStackGrid`. Transfers overwrite each grid-bound slot in place, so the game still saves and syncs the change. Vehicle bags are no longer reshaped on commit.
+- Moved cursor writes to `SetCurrentStack`, updated the loadout locker to equip per slot with `SetSlotItem`, and moved loadout item serialization to pooled binary streams.
+- No gameplay logic, block IDs, config files or save formats changed.
+
 ## 2.0.7 — BaseWorks
 
 - Renamed the public project, in-game display name, and release archive to BaseWorks. Kept the `NearbyCraft` installed folder, DLL, block IDs, config files, and save format for compatibility.

@@ -4,9 +4,9 @@
     <LangVersion>7.3</LangVersion>
     <AssemblyName>NearbyCraft</AssemblyName>
     <RootNamespace>NearbyCraft</RootNamespace>
-    <Version>2.0.7</Version>
-    <AssemblyVersion>2.0.7.0</AssemblyVersion>
-    <FileVersion>2.0.7.0</FileVersion>
+    <Version>2.0.8</Version>
+    <AssemblyVersion>2.0.8.0</AssemblyVersion>
+    <FileVersion>2.0.8.0</FileVersion>
     <Deterministic>true</Deterministic>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <DebugType>none</DebugType>
@@ -84,7 +84,7 @@
       <StageRoot>$(MSBuildProjectDirectory)/dist/stage</StageRoot>
       <StageMod>$(StageRoot)/NearbyCraft</StageMod>
       <StageXUi>$(StageMod)/Config/XUi_InGame</StageXUi>
-      <ReleaseZip>$(MSBuildProjectDirectory)/dist/BaseWorks-$(Version)-V3.2.zip</ReleaseZip>
+      <ReleaseZip>$(MSBuildProjectDirectory)/dist/BaseWorks-$(Version)-V3.3.zip</ReleaseZip>
     </PropertyGroup>
     <RemoveDir Directories="$(StageRoot)" />
     <MakeDir Directories="$(StageMod);$(StageXUi)" />

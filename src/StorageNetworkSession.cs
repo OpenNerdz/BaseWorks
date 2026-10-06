@@ -10,7 +10,7 @@ namespace NearbyCraft
         private sealed class StorageSource
         {
             internal TileEntity Owner;
-            internal ITileEntityLootable Storage;
+            internal TEFeatureStorage Storage;
             internal Vector3i Position;
             internal float DistanceSquared;
         }
@@ -18,7 +18,7 @@ namespace NearbyCraft
         private sealed class CatalogSourceSnapshot
         {
             internal TileEntity Owner;
-            internal ITileEntityLootable Storage;
+            internal TEFeatureStorage Storage;
             internal Vector3i Position;
             internal ItemStack[] Items;
             internal bool[] Locked;
@@ -94,9 +94,9 @@ namespace NearbyCraft
             foreach (StorageSource source in sources)
             {
                 if (!IsSourceValid(source)) continue;
-                for (int i = 0; i < source.Storage.items.Length; i++)
+                for (int i = 0; i < source.Storage.ItemGrid.items.Length; i++)
                 {
-                    ItemStack stack = source.Storage.items[i];
+                    ItemStack stack = source.Storage.ItemGrid.items[i];
                     if (IsSlotLocked(source, i) || stack == null || stack.IsEmpty() || stack.count <= 0) continue;
                     if (craftingOnly && stack.itemValue.HasModSlots && stack.itemValue.HasMods()) continue;
                     long current;
@@ -185,12 +185,12 @@ namespace NearbyCraft
                                 continue;
                             }
 
-                            ITileEntityLootable storage;
-                            if (!tileEntity.TryGetSelfOrFeature<ITileEntityLootable>(out storage)
+                            TEFeatureStorage storage;
+                            if (!tileEntity.TryGetSelfOrFeature<TEFeatureStorage>(out storage)
                                 || storage == null
-                                || !storage.bPlayerStorage
-                                || storage.items == null
-                                || storage.items.Length == 0)
+                                || !storage.ItemGrid.PlayerOwned
+                                || storage.ItemGrid.items == null
+                                || storage.ItemGrid.Length == 0)
                             {
                                 continue;
                             }
@@ -246,7 +246,7 @@ namespace NearbyCraft
                 }
 
                 ConnectedStorageCount++;
-                ItemStack[] slots = source.Storage.items;
+                ItemStack[] slots = source.Storage.ItemGrid.items;
                 for (int slotIndex = 0; slotIndex < slots.Length; slotIndex++)
                 {
                     if (IsSlotLocked(source, slotIndex))
@@ -282,7 +282,7 @@ namespace NearbyCraft
                 if (!ReferenceEquals(source.Owner, previous.Owner)
                     || !ReferenceEquals(source.Storage, previous.Storage)
                     || source.Position != previous.Position || !IsSourceValid(source)) return true;
-                ItemStack[] items = source.Storage.items;
+                ItemStack[] items = source.Storage.ItemGrid.items;
                 if (items == null || items.Length != previous.Items.Length) return true;
                 for (int slotIndex = 0; slotIndex < items.Length; slotIndex++)
                     if (IsSlotLocked(source, slotIndex) != previous.Locked[slotIndex]
@@ -298,7 +298,7 @@ namespace NearbyCraft
             for (int sourceIndex = 0; sourceIndex < sources.Count; sourceIndex++)
             {
                 StorageSource source = sources[sourceIndex];
-                ItemStack[] items = source.Storage.items;
+                ItemStack[] items = source.Storage.ItemGrid.items;
                 var locked = new bool[items.Length];
                 for (int slotIndex = 0; slotIndex < items.Length; slotIndex++)
                     locked[slotIndex] = IsSlotLocked(source, slotIndex);
@@ -380,7 +380,7 @@ namespace NearbyCraft
             foreach (StorageSource source in sources)
             {
                 if (source.Owner == excludedSource || !IsSourceValid(source)) continue;
-                ItemStack[] slots = source.Storage.items;
+                ItemStack[] slots = source.Storage.ItemGrid.items;
                 var locks = new bool[slots.Length];
                 for (int i = 0; i < locks.Length; i++) locks[i] = IsSlotLocked(source, i);
                 transaction.Sources.Add(source);
@@ -440,7 +440,7 @@ namespace NearbyCraft
         private bool IsTransactionSourceValid(Transaction transaction, int index)
         {
             StorageSource source = transaction.Sources[index];
-            if (!IsSourceValid(source) || !ReferenceEquals(source.Storage.items, transaction.Slots[index])) return false;
+            if (!IsSourceValid(source) || !ReferenceEquals(source.Storage.ItemGrid.items, transaction.Slots[index])) return false;
             for (int i = 0; i < transaction.Locks[index].Length; i++)
                 if (IsSlotLocked(source, i) != transaction.Locks[index][i]) return false;
             return true;
@@ -621,13 +621,13 @@ namespace NearbyCraft
                 return false;
             }
             TileEntity current = world == null ? null : world.GetTileEntity(source.Position);
-            return current == source.Owner && CanAccess(source.Owner) && source.Storage.bPlayerStorage
-                && source.Storage.items != null;
+            return current == source.Owner && CanAccess(source.Owner) && source.Storage.ItemGrid.PlayerOwned
+                && source.Storage.ItemGrid.items != null;
         }
 
         private bool IsSlotLocked(StorageSource source, int index)
         {
-            PackedBoolArray locked = respectLockedSlots && source.Storage.HasSlotLocksSupport ? source.Storage.SlotLocks : null;
+            PackedBoolArray locked = respectLockedSlots ? source.Storage.ItemGrid.SlotLocks : null;
             return locked != null && index < locked.Length && locked[index];
         }
 

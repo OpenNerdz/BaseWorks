@@ -42,6 +42,19 @@ plan = Plan(slots);
 Check(plan.Withdraw(Stack(1, 1), 99) == 50, "Withdraw returns real amount only");
 Check(plan.TryCommit(_ => true) && slots.All(s => s.IsEmpty()), "Withdrawal empties exact sources");
 
+// 3.3 chests and bags own their ItemStack objects; a commit must overwrite them in place.
+slots = new[] { Stack(1, 10), Stack(2, 5), ItemStack.Empty };
+var grid = new ItemStackGrid();
+foreach (var slot in slots) slot.owner = grid;
+var bound = (ItemStack[])slots.Clone();
+plan = Plan(slots);
+Check(plan.Deposit(Stack(3, 4)) == 4 && plan.Withdraw(Stack(1, 1), 10) == 10 && plan.Deposit(Stack(2, 3)) == 3
+    && plan.TryCommit(_ => true), "Grid-bound transaction commits");
+Check(slots.Select((slot, i) => ReferenceEquals(slot, bound[i])).All(same => same), "Grid-bound slots keep their ItemStack");
+Check(slots[0].IsEmpty() && slots[1].count == 8 && slots[2].itemValue.type == 3 && slots[2].count == 4,
+    "Grid-bound slots receive planned contents");
+Check(slots.All(slot => ReferenceEquals(slot.owner, grid)), "Grid binding survives the commit");
+
 slots = new[] { Stack(1, 10), ItemStack.Empty };
 plan = Plan(slots);
 plan.Withdraw(Stack(1, 1), 10);

@@ -104,7 +104,7 @@ namespace NearbyCraft
             if (scrollBar != null)
             {
                 scrollBar.ScrollBar.fillDirection = UIProgressBar.FillDirection.TopToBottom;
-                scrollBar.Connect(ScrollWheel);
+                scrollBar.Connect(ScrollWheel, () => { }); // Update() polls ScrollPosition.
             }
             XUiController scrollArea = GetChildById("nearbyCraftTerminalScrollArea");
             if (scrollArea != null)
@@ -675,7 +675,7 @@ namespace NearbyCraft
                 return;
             }
 
-            xui.DragAndDropWindow.CurrentStack = newHeld;
+            xui.DragAndDropWindow.SetCurrentStack(newHeld, false);
             xui.DragAndDropWindow.PickUpType = StackLocationTypes.LootContainer;
             if (held.IsEmpty())
             {
@@ -696,7 +696,7 @@ namespace NearbyCraft
             if (amount <= 0) return;
             ItemStack held = ItemStack.Clone();
             held.count = amount;
-            xui.DragAndDropWindow.CurrentStack = held;
+            xui.DragAndDropWindow.SetCurrentStack(held, false);
             xui.DragAndDropWindow.PickUpType = StackLocationTypes.LootContainer;
             StorageTerminalManager.RequestItemsRefresh();
         }
@@ -724,7 +724,7 @@ namespace NearbyCraft
 
             ItemStack remainder = held.Clone();
             remainder.count--;
-            xui.DragAndDropWindow.CurrentStack = remainder.count > 0 ? remainder : ItemStack.Empty;
+            xui.DragAndDropWindow.SetCurrentStack(remainder.count > 0 ? remainder : ItemStack.Empty, false);
             xui.DragAndDropWindow.PickUpType = StackLocationTypes.LootContainer;
             PlayPlaceSound(held);
             StorageTerminalManager.RequestItemsRefresh();

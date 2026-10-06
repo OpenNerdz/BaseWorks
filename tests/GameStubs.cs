@@ -28,6 +28,7 @@ public sealed partial class ItemValue
     public bool HasModSlots;
     public bool InstalledMods;
     public ItemClass ItemClassOrMissing = new ItemClass();
+    public static ItemValue None => new ItemValue();
     public ItemValue Clone() => new ItemValue { type = type, Metadata = Metadata, Quality = Quality, Seed = Seed,
         Flags = Flags, TextureFullArray = TextureFullArray, HasQuality = HasQuality,
         HasModSlots = HasModSlots, InstalledMods = InstalledMods,
@@ -38,10 +39,15 @@ public sealed partial class ItemValue
     public override int GetHashCode() => HashCode.Combine(type, Metadata, Quality);
 }
 
+// Marker for 3.3 grid ownership: GameSlots must overwrite bound slots in place.
+public sealed class ItemStackGrid { }
+
 public sealed partial class ItemStack
 {
     public ItemValue itemValue;
     public int count;
+    public ItemStackGrid owner;
+    public void Set(ItemValue value, int amount) { itemValue = value; count = amount; }
     public static ItemStack Empty => new ItemStack(new ItemValue(), 0);
     public ItemStack(ItemValue value, int amount) { itemValue = value; count = amount; }
     public bool IsEmpty() => count <= 0 || itemValue.type == 0;

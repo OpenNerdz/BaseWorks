@@ -15,8 +15,8 @@ namespace NearbyCraft
             TileEntityComposite source, int[] allowedTypes)
         {
             var sourceStorage = source?.GetFeature<TEFeatureStorage>();
-            if (sourceStorage == null || !StorageOutputPlanner.HasExportable(sourceStorage.items,
-                sourceStorage.HasSlotLocksSupport ? sourceStorage.SlotLocks : null, allowedTypes)) return 0;
+            if (sourceStorage == null || !StorageOutputPlanner.HasExportable(sourceStorage.ItemGrid.items,
+                sourceStorage.ItemGrid.SlotLocks, allowedTypes)) return 0;
             if (!NearbyCraftMod.CanUseLocalStorage || NearbyCraftMod.Config == null || !NearbyCraftMod.Config.Enabled
                 || world == null || GameManager.Instance.World != world || GameManager.Instance.IsPaused()
                 || player == null || player.IsDead() || world.GetPrimaryPlayer() != player
@@ -43,30 +43,35 @@ namespace NearbyCraft
         internal int CollectStorageOutput(TileEntityComposite origin, int[] allowedTypes)
         {
             var storage = origin.GetFeature<TEFeatureStorage>();
-            if (storage == null || !storage.bPlayerStorage || storage.items == null || !IsAvailable || AutomationBusy) return 0;
-            var live = storage.items;
+            if (storage == null || !storage.ItemGrid.PlayerOwned || storage.ItemGrid.items == null || !IsAvailable || AutomationBusy) return 0;
+            var live = storage.ItemGrid.items;
             var before = ItemStack.Clone(live);
             var after = ItemStack.Clone(live);
             var locks = new bool[live.Length];
             for (int i = 0; i < locks.Length; i++)
-                locks[i] = storage.HasSlotLocksSupport && storage.SlotLocks != null && i < storage.SlotLocks.Length && storage.SlotLocks[i];
+                locks[i] = IsLocked(storage, i);
             var transaction = BeginTransaction(origin); // Never deposit back into the miner being debited.
             int moved = StorageOutputPlanner.Collect(transaction.Plan, after, locks, allowedTypes);
             if (moved == 0 || !Commit(transaction, () =>
                 {
                     if (origin.IsRemoving || origin.IsUserAccessing() || !origin.LocalPlayerIsOwner
-                        || world.GetTileEntity(origin.ToWorldPos()) != origin || !ReferenceEquals(live, storage.items)
+                        || world.GetTileEntity(origin.ToWorldPos()) != origin || !ReferenceEquals(live, storage.ItemGrid.items)
                         || !SameSlots(live, before) || !CanAccess(origin)
                         || world.GetTileEntity(terminalPosition)?.IsUserAccessing() != false) return false;
                     for (int i = 0; i < locks.Length; i++)
-                        if (locks[i] != (storage.HasSlotLocksSupport && storage.SlotLocks != null
-                            && i < storage.SlotLocks.Length && storage.SlotLocks[i])) return false;
+                        if (locks[i] != IsLocked(storage, i)) return false;
                     return true;
-                }, () => { for (int i = 0; i < live.Length; i++) live[i] = after[i]; })) return 0;
+                }, () => { for (int i = 0; i < live.Length; i++) GameSlots.Replace(live, i, after[i]); })) return 0;
             try { origin.SetModified(); }
             catch (Exception e) { Log.Error("[NearbyCraft] Output committed; source notification failed: " + e); }
             StorageTerminalManager.RequestItemsRefresh();
             return moved;
+        }
+
+        private static bool IsLocked(TEFeatureStorage storage, int index)
+        {
+            PackedBoolArray locks = storage.ItemGrid.SlotLocks;
+            return locks != null && index < locks.Length && locks[index];
         }
     }
 }

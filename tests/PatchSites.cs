@@ -52,9 +52,8 @@ var requiredLoadoutMethods = new[] {
     ("Inventory", "CanMoveToSlot", 2),
     ("Equipment", "GetSlotCount", 0),
     ("Equipment", "GetSlotItem", 1),
-    ("Equipment", "SetSlotItemRaw", 2),
-    ("Equipment", "Clone", 0),
-    ("Equipment", "Apply", 2),
+    ("Equipment", "SetSlotItem", 2),
+    ("XUiM_PlayerEquipment", "RefreshEquipment", 0),
     ("ItemStack", "Write", 1),
     ("ItemStack", "Read", 1),
     ("GamePrefs", "GetString", 1),
@@ -100,6 +99,18 @@ foreach (var (typeName, fieldName) in new[] {
 }) {
     bool found = module.GetTypes().Where(t => t.Name == typeName).Any(t => t.Fields.Any(f => f.Name == fieldName));
     Console.WriteLine($"{(found ? "PASS" : "FAIL")} Workshop state: {typeName}.{fieldName}");
+    total++;
+    if (!found) failed++;
+}
+// 3.3 storage grids: chests, vehicle/drone bags and the cursor hold ItemStacks bound to an ItemStackGrid.
+foreach (var (typeName, memberName) in new[] {
+    ("TEFeatureStorage", "get_ItemGrid"), ("Bag", "get_ItemGrid"), ("Bag", "get_LockedSlots"),
+    ("ItemStackGrid", "get_PlayerOwned"), ("ItemStackGrid", "get_SlotLocks"), ("ItemStackGrid", "items"),
+    ("ItemStack", "owner"), ("ItemStack", "Set"), ("XUiC_DragAndDropWindow", "SetCurrentStack"),
+}) {
+    bool found = module.GetTypes().Where(t => t.Name == typeName)
+        .Any(t => t.Methods.Any(m => m.Name == memberName) || t.Fields.Any(f => f.Name == memberName && f.IsPublic));
+    Console.WriteLine($"{(found ? "PASS" : "FAIL")} Storage grid API: {typeName}.{memberName}");
     total++;
     if (!found) failed++;
 }

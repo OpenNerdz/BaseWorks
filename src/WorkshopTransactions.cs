@@ -16,9 +16,9 @@ namespace NearbyCraft
             foreach (var source in sources)
             {
                 if (!IsSourceValid(source)) continue;
-                for (int i = 0; i < source.Storage.items.Length; i++)
+                for (int i = 0; i < source.Storage.ItemGrid.items.Length; i++)
                 {
-                    var stack = source.Storage.items[i];
+                    var stack = source.Storage.ItemGrid.items[i];
                     if (!IsSlotLocked(source, i) && stack != null && !stack.IsEmpty() && stack.itemValue.type == type
                         && (!craftingOnly || !stack.itemValue.HasModSlots || !stack.itemValue.HasMods()))
                         count += stack.count;

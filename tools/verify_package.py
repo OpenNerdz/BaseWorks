@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only checks of the mod's XML against an installed V3.2 config tree."""
+"""Read-only checks of the mod's XML against an installed V3.3 config tree."""
 import copy
 import csv
 import gzip
@@ -307,7 +307,7 @@ check(manifest.xpath('/xml/Website/@value') == ['https://github.com/OpenNerdz/Ba
       'Manifest points to the renamed repository')
 check(project.xpath('/Project/PropertyGroup/AssemblyName/text()') == ['NearbyCraft'],
       'Rebrand keeps the existing DLL identity')
-check('dist/BaseWorks-$(Version)-V3.2.zip' in (repo / 'NearbyCraft.csproj').read_text(),
+check('dist/BaseWorks-$(Version)-V3.3.zip' in (repo / 'NearbyCraft.csproj').read_text(),
       'Release archive uses the BaseWorks name')
 check('and \'$(GameplayQA)\' != \'true\'' in (repo / 'NearbyCraft.csproj').read_text(), 'Gameplay QA builds cannot package a release')
 check('and \'$(AssetQA)\' != \'true\'' in (repo / 'NearbyCraft.csproj').read_text(), 'Asset QA builds cannot package a release')

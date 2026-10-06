@@ -7,7 +7,7 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <Compile Include="SchedulerTests.cs" /><Compile Include="SchedulerGameStubs.cs" />
     <Compile Include="MachineGameStubs.cs" /><Compile Include="GameStubs.cs" />
-    <Compile Include="../src/StorageTransferPlan.cs" /><Compile Include="../src/WorkshopPlanner.cs" />
+    <Compile Include="../src/StorageTransferPlan.cs" /><Compile Include="../src/GameSlots.cs" /><Compile Include="../src/WorkshopPlanner.cs" />
     <Compile Include="../src/WorkshopRules.cs" /><Compile Include="../src/WorkshopStore.cs" />
     <Compile Include="../src/WorkshopScheduler.cs" /><Compile Include="../src/WorkshopMachines.cs" />
     <Compile Include="../src/WorkshopProductionPlanner.cs" />

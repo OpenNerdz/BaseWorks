@@ -151,7 +151,7 @@ namespace NearbyCraft
                 Inventory inventory = inventories[n];
                 for (int i = 0; i < inventory.Live.Length; i++)
                     if (!Equal(inventory.Before[i], inventory.After[i]))
-                        inventory.Live[i] = inventory.After[i];
+                        GameSlots.Replace(inventory.Live, i, inventory.After[i]);
             }
             committed = true;
             return true;

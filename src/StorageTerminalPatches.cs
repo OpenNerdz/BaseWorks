@@ -95,7 +95,7 @@ namespace NearbyCraft
                     session.Deposit(moved);
                     // If a source disappeared during an inventory event, retain the
                     // real remainder on the cursor instead of discarding it.
-                    if (moved.count > 0) __instance.xui.DragAndDropWindow.CurrentStack = moved;
+                    if (moved.count > 0) __instance.xui.DragAndDropWindow.SetCurrentStack(moved, false);
                 }
                 __instance.PlayPickupSound(requested);
                 StorageTerminalManager.RequestItemsRefresh();
